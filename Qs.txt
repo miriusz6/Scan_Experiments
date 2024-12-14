@@ -1,0 +1,11 @@
+Group:
+1. How many steps? cap ? K-fold to get epoch! DONE
+2. Choosing best model across runs: Average  DONE
+3. Training and passing encoders output.  teacher required! optional? ABANDONED
+4. Inference time ask!  no matter ABANDONED
+5. 3.3.3 how many experiments  correct
+
+
+Individual:
+1. what is api based models
+2. what fine-tunning is allowed?
