@@ -1,8 +1,9 @@
+from __future__ import annotations
 from enum import IntEnum, auto
 import operator
 from experiments.experiment_type import ExperimentType
 from experiments.utils import merge_names
-
+import numpy as np
 
 class Flag(IntEnum):
     # Metric Type
@@ -17,6 +18,7 @@ class Flag(IntEnum):
     InLen = auto()
     OutLen = auto()
     Avrg = auto()
+    Sum = auto()
     # Prediction Type
     ORACLE = auto()
     NO_ORACLE = auto()
@@ -78,7 +80,8 @@ class _DistrFlags(FlagSubClass):
     InLen = Flag.InLen
     OutLen = Flag.OutLen
     Avrg = Flag.Avrg
-    _all = [InLen, OutLen, Avrg]
+    Sum = Flag.Sum
+    _all = [InLen, OutLen, Avrg, Sum]
 
     def __str__(self):
         return self.__class__.__name__
@@ -158,8 +161,8 @@ class Metric():
         self._val = val
         self.e_type = e_type
         self.e_name = e_name
-        # if not self.e_name.startswith("(") and not self.e_name == "MIXED": 
-        #     self.e_name = f"(ORG){self.e_name}"
+        if not self.e_name.startswith("(") and not self.e_name == "MIXED": 
+            self.e_name = f"(ORG){self.e_name}"
         self._flags = flags
         f_groups = Flags.group_flags(flags)
         
@@ -173,6 +176,12 @@ class Metric():
     @property
     def val(self):
         return self._val
+    
+    @val.setter
+    def val(self, v):
+        if not self.e_name.startswith("(") and not self.e_name == "MIXED": 
+            self.e_name = f"(MOD){self.e_name}"
+        self._val = v
 
     @property
     def flags(self):
@@ -181,6 +190,20 @@ class Metric():
     @property
     def flagsS(self):
         return " ".join([f"{f.name} " for f in self.flags])
+    
+    @classmethod
+    def to_dict(cls, metric:Metric):
+        v = metric.val
+        if isinstance(v, np.ndarray):
+            v = v.tolist()
+        return {"e_name": metric.e_name, "e_type": metric.e_type.value, "flags": metric.flags, "val": v}
+    
+    @classmethod
+    def from_dict(cls,d: dict):
+        v = d["val"]
+        if isinstance(v, list):
+            v = np.array(v)
+        return Metric(v, d["e_name"], ExperimentType(d["e_type"]), [Flag(f) for f in d["flags"]])
 
 
     def __str__(self):
@@ -233,6 +256,14 @@ class Metric():
             return Metric(new_val, new_name, self.e_type, self.flags)
         new_name = merge_names(self.e_name, other.e_name)
         new_name = self._update_modifiers(new_name, mod)
+
+        if isinstance(self.val, np.ndarray) and isinstance(other.val, np.ndarray):
+            # pad both to tthe same length
+            if len(self.val) < len(other.val):
+                self.val = np.pad(self.val, (0, len(other.val) - len(self.val)))
+            elif len(self.val) > len(other.val):
+                other.val = np.pad(other.val, (0, len(self.val) - len(other.val)))
+                
         new_val = oper(self.val, other.val)
         if other.e_type == self.e_type:
             new_type = self.e_type
@@ -253,7 +284,7 @@ class Metric():
         return self._smth(other, operator.truediv, "DIV")
     
     def __floordiv__(self, other):
-        return self._smth(other, operator.floordiv, "FDIV")
+        return self._smth(other, operator.floordiv, "DIV")
     
     def __mod__(self, other):
         return self._smth(other, operator.mod, "MOD")

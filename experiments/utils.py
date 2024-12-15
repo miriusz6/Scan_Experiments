@@ -14,25 +14,102 @@ def get_common_prefix( lst: list[str]) -> str:
         i += 1
     return s1[:i]
 
+
+var_fillers = list(range(ord('Z'), ord('A') - 1, -1))
+var_fillers = [chr(f) for f in var_fillers]
+
+def get_curr_fillers(s):
+    fls_st = s.find('[')
+    fls_end = s.find(']')
+    if fls_st == -1 or fls_end == -1:
+        return ""
+    #fls = s[fls_st+1:fls_end].split(',')
+    fls = s[fls_st+1:fls_end]
+    return fls
+
+def cut_fillers(s):
+    fls_st = s.find('[')
+    if fls_st == -1:
+        return s
+    return s[:fls_st]
+
 def merge_names(s1,s2):
+    if s1 == s2:
+        return s1
+    s_matcher = SequenceMatcher(None, s1, s2)
+    s1_fls = get_curr_fillers(s1)
+    s2_fls = get_curr_fillers(s2)
+    s_fls_matcher = SequenceMatcher(None, s1_fls, s2_fls)
+    
+    s_matches = s_matcher.get_matching_blocks()
+    s_fls_matches = s_fls_matcher.get_matching_blocks()
+    fls_in_use = get_curr_fillers(s1).split(',') + get_curr_fillers(s2).split(',')
+    avaiable_fls = [f for f in var_fillers if f not in fls_in_use]
+    common = ""
+    new_fls = []
+
+
+    
+
+    common_sub_strs = [s1[block.a : block.a + block.size] for block in s_matches]
+    in_mods = '(' in common_sub_strs[0]
+    
+    for i,s in enumerate(common_sub_strs[:-1]):
+        common += s
+        if ')' in common:
+            in_mods = False   
+        if i != len(s_matches)-2 and not common_sub_strs[i+1][0] == ']':
+            common += avaiable_fls[i]
+            new_fls.append(avaiable_fls[i])
+            if in_mods and common_sub_strs[i+1][0] != ')':
+                #pew = common[i+1][0]
+                common += ','
+            
+    if i == 0:
+        return "MIXED"
+    
+    final_fls = []
+
+    if len(s_fls_matches) == 1 and s_fls_matches[0].size == 0:
+        pass
+    else:
+        for i,block in enumerate(s_fls_matches):
+            if block.size == 0:
+                continue
+            final_fls.append(s1_fls[block.a : block.a + block.size])
+    
+    common = cut_fillers(common)
+    final_fls += new_fls
+    final_fls = ','.join(final_fls)
+
+    return common+ f"[{final_fls}]" #f"[{fs[:-1]}]"
+
+def merge_names2(s1,s2):
     if s1 == s2:
         return s1
     s = SequenceMatcher(None, s1, s2)
     blocks = s.get_matching_blocks()
-    fillers = list(range(ord('Z'), ord('A') - 1, -1))
-    fillers = [chr(f) for f in fillers]
+    fillers_in_use = get_curr_fillers(s1) + get_curr_fillers(s2)
+    fillers = [f for f in var_fillers if f not in fillers_in_use]
     common = ""
-    fs = ""
-    for i in range(len(blocks)):
-        common += s1[blocks[i].a : blocks[i].a + blocks[i].size] + fillers[i]
-        fs += fillers[i]
+    new_fls = []
+    
+    for i,block in enumerate(blocks):
+        if block.size == 0:
+            continue
+        common += s1[block.a : block.a + block.size]
+        if i != len(blocks)-1:
+            common += fillers[i]
+            new_fls.append(fillers[i])
     if i == 0:
         return "MIXED"
+    
+
     prev_fs_i = common.find('[')
     if prev_fs_i != -1:
         common = common[0:prev_fs_i]
 
-    return common[0:-1]+ f"[{fs[:-1]}]"
+    return common+ f"[{new_fls}]" #f"[{fs[:-1]}]"
 
 
 from collections import OrderedDict

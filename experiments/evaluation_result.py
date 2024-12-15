@@ -52,7 +52,15 @@ class EvaluationResult:
     
     def get_data(self, template: MetricTemplate):
         indxs = self._find_index(template)
-        return [self.data[i] for i in indxs]
+        ret = []
+        for i in indxs:
+            m = self.data[i]
+            # if is a metric
+            if m:
+                ret.append(m)
+        return ret
+
+        
     
     def _unpack_data(self,data):
         from experiments.utils import switch_dict_lvls, flatten_dict
@@ -103,7 +111,25 @@ class EvaluationResult:
         else:
             new_data = [oper(a,other) for a in self.data]
             return EvaluationResult(new_data, self.experiment_name, self.experiment_type)
-
+        
+    @classmethod
+    def to_dict(cls, eval_result: EvaluationResult):
+        d = {}
+        for i,m in enumerate(eval_result.data):
+            if isinstance(m, Metric):
+                d[i] = Metric.to_dict(m)
+            else:
+                d[i] = m
+        return {"e_name": eval_result.experiment_name, "e_type": eval_result.experiment_type.value, "data": d}
+    
+    @classmethod
+    def from_dict(cls,d: dict):
+        data = d["data"]
+        data = [Metric.from_dict(v) if isinstance(v, dict) else v for v in data.values()]
+        e_name = d["e_name"]
+        e_type = ExperimentType( d["e_type"])
+        return EvaluationResult(data, e_name, e_type)
+    
     def __str__(self):
         return f"Experiment: {self.experiment_name} Results, Type: {self.experiment_type.name}"
 

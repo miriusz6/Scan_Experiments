@@ -1,9 +1,9 @@
-from enum import Enum,auto
+from enum import IntEnum,auto
 import os 
 CURR_DIR = os.getcwd() #os.path.dirname(os.path.realpath(__file__))
 
 # WORK IN PROGRESS
-class ExperimentType(Enum):
+class ExperimentType(IntEnum):
     # Exper 1 simple split 80/20
     # Exper 1 size variations for p in {1,2,4,8,16,32,64}
     # Exper 2: seq length differs between train and test
@@ -105,12 +105,12 @@ class ExperimentType(Enum):
 
     def _E2_paths(self):
         if self == ExperimentType.E_2:
-            return {"train": os.path.join(CURR_DIR, "data/length_split/tasks_train_length.txt"),
-                    "test": os.path.join(CURR_DIR, "data/length_split/tasks_test_length.txt")}
+            return {"train": os.path.join(CURR_DIR, "dataset/data/length_split/tasks_train_length.txt"),
+                    "test": os.path.join(CURR_DIR, "dataset/data/length_split/tasks_test_length.txt")}
 
     def _E3_paths(self):
         # WORK IN PROGRESS
-        E_3_base = os.path.join(CURR_DIR, "data/add_prim_split")
+        E_3_base = os.path.join(CURR_DIR, "dataset/data/add_prim_split")
         E_3_3_base = os.path.join(E_3_base, "with_additional_examples")
         #E_3_3_train_name = lambda i: E_3_3_base + f"/tasks_train_addprim_complex_jump_num{i}_rep1.txt"
         if self == ExperimentType.E_3_1:

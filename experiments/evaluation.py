@@ -182,11 +182,6 @@ def _evaluate_model_batchwise(model, test_data, test_loader, vocab, device="cpu"
     tgt_seq_span = torch.zeros(tgt_len_max+1, device=device, dtype=torch.long)
 
     template = {
-        Flags.DistrFlags.Avrg:
-            {
-                Flags.LevelFlags.TL: 0,
-                Flags.LevelFlags.SL: 0,
-            },
         Flags.DistrFlags.InLen:
             {
                 Flags.LevelFlags.TL: inp_seq_span.clone(),
@@ -196,6 +191,11 @@ def _evaluate_model_batchwise(model, test_data, test_loader, vocab, device="cpu"
             {
                 Flags.LevelFlags.TL: tgt_seq_span.clone(),
                 Flags.LevelFlags.SL: tgt_seq_span.clone(),
+            },
+        Flags.DistrFlags.Sum:
+            {
+                Flags.LevelFlags.TL: 0,
+                Flags.LevelFlags.SL: 0
             }
     }
     correct = deepcopy(template)
@@ -238,8 +238,8 @@ def _evaluate_model_batchwise(model, test_data, test_loader, vocab, device="cpu"
         # sum up seq differences, if no differences then correct
         correct_seqs = torch.where(seq_diff == 0, 1, 0)
 
-        correct[Flag.Avrg][Flag.SL] += correct_seqs.sum()
-        total[Flag.Avrg][Flag.SL] += tgt.size(0)
+        correct[Flag.Sum][Flag.SL] += correct_seqs.sum()
+        total[Flag.Sum][Flag.SL] += tgt.size(0)
 
         
         correct[Flag.InLen][Flag.SL].scatter_add_(0, src_lens ,  correct_seqs)
@@ -257,8 +257,8 @@ def _evaluate_model_batchwise(model, test_data, test_loader, vocab, device="cpu"
         both_tokens = torch.where(is_special_F(tgt) & is_special_F(predictions), False, True)
         # correctly predicted not special tokens
         correctly_predicted = torch.where(both_tokens & (tgt == predictions), True, False)
-        correct[Flag.Avrg][Flag.TL] += correctly_predicted.sum()
-        total[Flag.Avrg][Flag.TL] += tokens_to_predict
+        correct[Flag.Sum][Flag.TL] += correctly_predicted.sum()
+        total[Flag.Sum][Flag.TL] += tokens_to_predict
 
         correct[Flag.InLen][Flag.TL].scatter_add_(0, src_lens ,  correctly_predicted.sum(1))
         total[Flag.InLen][Flag.TL].scatter_add_(0, src_lens ,  tgt_lens)
@@ -266,6 +266,23 @@ def _evaluate_model_batchwise(model, test_data, test_loader, vocab, device="cpu"
         correct[Flag.OutLen][Flag.TL].scatter_add_(0, tgt_lens ,  correctly_predicted.sum(1))
         total[Flag.OutLen][Flag.TL].scatter_add_(0, tgt_lens ,  tgt_lens)
 
+    template = {
+        Flags.DistrFlags.Avrg:
+            {
+                Flags.LevelFlags.TL: 0,
+                Flags.LevelFlags.SL: 0,
+            },
+        Flags.DistrFlags.InLen:
+            {
+                Flags.LevelFlags.TL: inp_seq_span.clone(),
+                Flags.LevelFlags.SL: inp_seq_span.clone(),
+            },
+        Flags.DistrFlags.OutLen:
+            {
+                Flags.LevelFlags.TL: tgt_seq_span.clone(),
+                Flags.LevelFlags.SL: tgt_seq_span.clone(),
+            },
+    }
 
     
     err_rate = calc_error_rate(correct, total,deepcopy(template))
@@ -303,30 +320,47 @@ def evaluate_model_batchwise(model, test_data, test_loader, vocab, device="cpu")
 def calc_error_rate(correct, total, template):
     err_rate = template
     # total - correct / total
-    err_rate[Flag.Avrg][Flag.TL] = ((total[Flag.Avrg][Flag.TL]- correct[Flag.Avrg][Flag.TL])/ total[Flag.Avrg][Flag.TL])
-    err_rate[Flag.Avrg][Flag.SL] = ((total[Flag.Avrg][Flag.SL]- correct[Flag.Avrg][Flag.SL]) / total[Flag.Avrg][Flag.SL])
+    err_rate[Flag.Avrg][Flag.TL] = ((total[Flag.Sum][Flag.TL]- correct[Flag.Sum][Flag.TL])/ total[Flag.Sum][Flag.TL])
+    err_rate[Flag.Avrg][Flag.SL] = ((total[Flag.Sum][Flag.SL]- correct[Flag.Sum][Flag.SL]) / total[Flag.Sum][Flag.SL])
     err_rate[Flag.InLen][Flag.TL] = torch.div((total[Flag.InLen][Flag.TL] - correct[Flag.InLen][Flag.TL]), total[Flag.InLen][Flag.TL])
     err_rate[Flag.InLen][Flag.SL] = torch.div((total[Flag.InLen][Flag.SL] - correct[Flag.InLen][Flag.SL]), total[Flag.InLen][Flag.SL])
     err_rate[Flag.OutLen][Flag.TL] = torch.div((total[Flag.OutLen][Flag.TL] - correct[Flag.OutLen][Flag.TL]), total[Flag.OutLen][Flag.TL])
-    err_rate[Flag.OutLen][Flag.SL] = torch.div((total[Flag.Avrg][Flag.SL] - correct[Flag.OutLen][Flag.SL]), total[Flag.Avrg][Flag.SL])
+    err_rate[Flag.OutLen][Flag.SL] = torch.div((total[Flag.Sum][Flag.SL] - correct[Flag.OutLen][Flag.SL]), total[Flag.Sum][Flag.SL])
     return err_rate
 
 def calc_acc(correct, total, template):
     acc = template
     # correct / total
-    acc[Flag.Avrg][Flag.TL] = (correct[Flag.Avrg][Flag.TL]/ total[Flag.Avrg][Flag.TL])
-    acc[Flag.Avrg][Flag.SL] = (correct[Flag.Avrg][Flag.SL] / total[Flag.Avrg][Flag.SL])
+    acc[Flag.Avrg][Flag.TL] = (correct[Flag.Sum][Flag.TL]/ total[Flag.Sum][Flag.TL])
+    acc[Flag.Avrg][Flag.SL] = (correct[Flag.Sum][Flag.SL] / total[Flag.Sum][Flag.SL])
     acc[Flag.InLen][Flag.TL] = torch.div(correct[Flag.InLen][Flag.TL], total[Flag.InLen][Flag.TL])
     acc[Flag.InLen][Flag.SL] = torch.div(correct[Flag.InLen][Flag.SL], total[Flag.InLen][Flag.SL])
     acc[Flag.OutLen][Flag.TL] = torch.div(correct[Flag.OutLen][Flag.TL], total[Flag.OutLen][Flag.TL])
-    acc[Flag.OutLen][Flag.SL] = torch.div(correct[Flag.OutLen][Flag.SL], total[Flag.Avrg][Flag.SL])
+    acc[Flag.OutLen][Flag.SL] = torch.div(correct[Flag.OutLen][Flag.SL], total[Flag.Sum][Flag.SL])
     return acc
 
 def detach_result_map(m):
-    if isinstance(m[Flag.Avrg][Flag.TL], torch.Tensor):
+    try:
         m[Flag.Avrg][Flag.TL] = m[Flag.Avrg][Flag.TL].item()
-    if isinstance(m[Flag.Avrg][Flag.SL], torch.Tensor):
+    except:
+        pass
+    try:
         m[Flag.Avrg][Flag.SL] = m[Flag.Avrg][Flag.SL].item()
+    except:
+        pass
+    try:
+        m[Flag.Sum][Flag.SL] = m[Flag.Sum][Flag.SL].item()
+    except:
+        pass
+    try:
+        m[Flag.Sum][Flag.TL] = m[Flag.Sum][Flag.TL].item()
+    except:
+        pass
+
+    # if isinstance(m[Flag.Avrg][Flag.TL], torch.Tensor):
+    #     m[Flag.Avrg][Flag.TL] = m[Flag.Avrg][Flag.TL].item()
+    # if isinstance(m[Flag.Avrg][Flag.SL], torch.Tensor):
+    #     m[Flag.Avrg][Flag.SL] = m[Flag.Avrg][Flag.SL].item()
     m[Flag.InLen][Flag.TL] = remove_nan(m[Flag.InLen][Flag.TL]).cpu().numpy()
     m[Flag.InLen][Flag.SL] = remove_nan(m[Flag.InLen][Flag.SL]).cpu().numpy()
     m[Flag.OutLen][Flag.TL] = remove_nan(m[Flag.OutLen][Flag.TL]).cpu().numpy()
