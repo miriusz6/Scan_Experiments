@@ -1,10 +1,10 @@
 from __future__ import annotations
 from experiments.experiment_type import ExperimentType
-from experiments.metric import Metric, MetricTemplate, Flags, Flag
+from experiments.metric import Metric, MetricTemplate, Flags
 from experiments.utils import merge_names
 import numpy as np
 import operator
-from math import prod
+
 
 class EvaluationResult:
     @staticmethod
@@ -55,15 +55,27 @@ class EvaluationResult:
         return [self.data[i] for i in indxs]
     
     def _unpack_data(self,data):
-        d = []
-        e = self.experiment_type
-        en = self.experiment_name
-        for of in _PredictionType:
-            for m in _MetricType:
-                for f in _MetricLevel:
-                    data_point = Metric(data[of][m][f],en,e, of, f, m)
-                    d.append(data_point)
-        return d
+        
+        from experiments.utils import switch_dict_lvls, flatten_dict
+        # D L M P
+        groups = Flags.All
+        curr_d_lvl = data
+        # P M D L
+        order = []
+        for _ in groups:
+            k = list(curr_d_lvl.keys())[0]
+            order.append(Flags.get_group(k))
+            curr_d_lvl = curr_d_lvl[k]
+        # 3 2 0 1
+        proper_order = [order.index(g) for g in groups]
+        
+        data = switch_dict_lvls(data, proper_order)
+        
+        data = flatten_dict(data)
+        
+        return [Metric(v,self.experiment_name,self.experiment_type,list(k)) for k,v in data.items()]
+        
+        
     
     
     def print(self, scalars_only = True):

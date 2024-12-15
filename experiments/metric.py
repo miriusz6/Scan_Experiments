@@ -1,11 +1,8 @@
 from enum import Enum, auto
-from abc import ABC
 import operator
-#from experiments.experiment import ExperimentType
+from experiments.experiment_type import ExperimentType
 from experiments.utils import merge_names
 
-class ExperimentType(Enum):
-    pass
 
 class Flag(Enum):
     # Metric Type
@@ -103,6 +100,12 @@ class _Flags():
             ret[g] = [f for f in flags if f in g.All]
         return ret
     
+    def get_group(self, flag: Flag):
+        for g in self._all:
+            if g.belong(flag):
+                return g
+        return None
+    
     @property
     def All(self):
         self._all.sort(key=str)
@@ -145,114 +148,127 @@ class MetricTemplate():
     def __repr__(self):
         return self.__str__()
 
-# class Metric():
-#     def __init__(self, val, e_name:str, e_type: ExperimentType, flags: list[Flag]):
-#         self._val = val
-#         self.e_type = e_type
-#         self.e_name = e_name
-#         if not self.e_name.startswith("(") and not self.e_name == "MIXED": 
-#             self.e_name = f"(ORG){self.e_name}"
-#         self.flags = flags.sort(key=lambda x: x.value)
+class Metric():
+    def __init__(self, val, e_name:str, e_type: ExperimentType, flags: list[Flag]):
+        self._val = None
+        self._flags = None
+        self._e_type = None
+        self._e_name = None
+        
+        self._val = val
+        self.e_type = e_type
+        self.e_name = e_name
+        # if not self.e_name.startswith("(") and not self.e_name == "MIXED": 
+        #     self.e_name = f"(ORG){self.e_name}"
+        self._flags = flags
+        f_groups = Flags.group_flags(flags)
+        
+        # Check if only one flag of each group is present
+        single_flags = [len(vals) == 1 for vals in f_groups.values()]
+        if sum(single_flags) != len(f_groups.values()):
+            raise ValueError("Only one flag of each group is _allowed")
+        # self._flags = flags
+        self._flags.sort(key=lambda x: x.value)
 
-#     @property
-#     def val(self):
-#         return self._val
+    @property
+    def val(self):
+        return self._val
 
-#     @property
-#     def flags(self):
-#         return self.flags
+    @property
+    def flags(self):
+        return self._flags
     
-#     @property
-#     def flagsS(self):
-#         return " ".join([f"{f.name} " for f in self.flags])
+    @property
+    def flagsS(self):
+        return " ".join([f"{f.name} " for f in self.flags])
 
 
-#     def __str__(self):
-#         return f"{self.e_name} {self.e_type.name} {self.flagsS} : {self.val}"
+    def __str__(self):
+        return f"{self.e_name} {self.e_type.name} {self.flagsS} : {self.val}"
     
-#     def __repr__(self):
-#         return self.__str__()
+    def __repr__(self):
+        return self.__str__()
 
-#     def _update_modifiers(self, name, new_mod:str):
-#         i = name.find(")")
-#         mods = name[1:i]
-#         if mods == "ORG":
-#             return f"({new_mod}"+name[i:]
-#         return '(' + new_mod +','+  name[1:]
+    def _update_modifiers(self, name, new_mod:str):
+        i = name.find(")")
+        mods = name[1:i]
+        if mods == "ORG":
+            return f"({new_mod}"+name[i:]
+        return '(' + new_mod +','+  name[1:]
 
-#     def __lt__(self, other):
-#         if isinstance(other, Metric):
-#             return self.val < other.val
-#         return self.val < other
+    def __lt__(self, other):
+        if isinstance(other, Metric):
+            return self.val < other.val
+        return self.val < other
     
-#     def __le__(self, other):
-#         if isinstance(other, Metric):
-#             return self.val <= other.val
-#         return self.val <= other
+    def __le__(self, other):
+        if isinstance(other, Metric):
+            return self.val <= other.val
+        return self.val <= other
     
-#     def __eq__(self, other):
-#         if isinstance(other, Metric):
-#             return self.val == other.val
-#         return self.val == other
+    def __eq__(self, other):
+        if isinstance(other, Metric):
+            return self.val == other.val
+        return self.val == other
     
-#     def __ne__(self, other):
-#         if isinstance(other, Metric):
-#             return self.val != other.val
-#         return self.val != other
+    def __ne__(self, other):
+        if isinstance(other, Metric):
+            return self.val != other.val
+        return self.val != other
     
-#     def __gt__(self, other):
-#         if isinstance(other, Metric):
-#             return self.val > other.val
-#         return self.val > other
+    def __gt__(self, other):
+        if isinstance(other, Metric):
+            return self.val > other.val
+        return self.val > other
     
-#     def __ge__(self, other):
-#         if isinstance(other, Metric):
-#             return self.val >= other.val
-#         return self.val >= other
+    def __ge__(self, other):
+        if isinstance(other, Metric):
+            return self.val >= other.val
+        return self.val >= other
     
-#     def _smth(self,other, oper, mod:str):
-#         if not isinstance(other, Metric):
-#             new_name = self._update_modifiers(self.e_name, mod)
-#             new_val = oper(self.val, other)
-#             return Metric(new_val, new_name, self.e_type, self.flags)
-#         new_name = merge_names(self.e_name, other.e_name)
-#         new_name = self._update_modifiers(new_name, mod)
-#         new_val = oper(self.val, other.val)
-#         if other.e_type == self.e_type:
-#             new_type = self.e_type
-#         else:
-#             new_type = ExperimentType.MIX
-#         return Metric(new_val, new_name, new_type, self.flags)    
+    def _smth(self,other, oper, mod:str):
+        if not isinstance(other, Metric):
+            new_name = self._update_modifiers(self.e_name, mod)
+            new_val = oper(self.val, other)
+            return Metric(new_val, new_name, self.e_type, self.flags)
+        new_name = merge_names(self.e_name, other.e_name)
+        new_name = self._update_modifiers(new_name, mod)
+        new_val = oper(self.val, other.val)
+        if other.e_type == self.e_type:
+            new_type = self.e_type
+        else:
+            new_type = ExperimentType.MIX
+        return Metric(new_val, new_name, new_type, self.flags)    
     
-#     def __add__(self, other):
-#         return self._smth(other, operator.add, "ADD")
+    def __add__(self, other):
+        return self._smth(other, operator.add, "ADD")
     
-#     def __sub__(self, other):
-#         return self._smth(other, operator.sub, "SUB")
+    def __sub__(self, other):
+        return self._smth(other, operator.sub, "SUB")
     
-#     def __mul__(self, other):
-#         return self._smth(other, operator.mul, "MUL")
+    def __mul__(self, other):
+        return self._smth(other, operator.mul, "MUL")
     
-#     def __truediv__(self, other):
-#         return self._smth(other, operator.truediv, "DIV")
+    def __truediv__(self, other):
+        return self._smth(other, operator.truediv, "DIV")
     
-#     def __floordiv__(self, other):
-#         return self._smth(other, operator.floordiv, "FDIV")
+    def __floordiv__(self, other):
+        return self._smth(other, operator.floordiv, "FDIV")
     
-#     def __mod__(self, other):
-#         return self._smth(other, operator.mod, "MOD")
+    def __mod__(self, other):
+        return self._smth(other, operator.mod, "MOD")
     
-#     def __pow__(self, other):
-#         return self._smth(other, operator.pow, "POW")
+    def __pow__(self, other):
+        return self._smth(other, operator.pow, "POW")
     
-# class ScanMetric(Metric):
-#     def __init__(self, val, e_name:str, e_type: ExperimentType, flags: list[Flag]):
+# # class ScanMetric(Metric):
+# #     def __init__(self, val, e_name:str, e_type: ExperimentType, flags: list[Flag]):
 
-#         f_groups = Flags.group_flags(flags)
-#         # Check if only one flag of each group is present
-#         single_flags = [len(vals) == 1 for vals in f_groups.values()]
-#         if sum(single_flags) != len(f_groups.values()):
-#             raise ValueError("Only one flag of each group is _allowed")
+# #         f_groups = Flags.group_flags(flags)
+# #         # Check if only one flag of each group is present
+# #         single_flags = [len(vals) == 1 for vals in f_groups.values()]
+# #         if sum(single_flags) != len(f_groups.values()):
+# #             raise ValueError("Only one flag of each group is _allowed")
 
-#         super().__init__(val, e_name, e_type, flags)
+# #         super().__init__(val, e_name, e_type, flags)
         

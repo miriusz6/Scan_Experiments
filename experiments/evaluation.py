@@ -1,6 +1,7 @@
 import torch
 from experiments.metric import Flags, Flag
 from copy import deepcopy
+from collections import OrderedDict
 
 def predict_batch(model, src_sequence, vocab, max_len=128, device="cpu"):
     """
@@ -130,6 +131,50 @@ def predict_batch_oracle(model, src_sequence, vocab, seq_lenghts, device="cpu"):
                 break
     return tgt
 
+def _dummy_eval_result():
+    inp_len_max = 10
+    tgt_len_max = 10
+    inp_seq_span = torch.zeros(inp_len_max+1, device="cpu", dtype=torch.long)
+    tgt_seq_span = torch.zeros(tgt_len_max+1, device="cpu", dtype=torch.long)
+
+    template = OrderedDict({
+        Flags.DistrFlags.Avrg:
+            OrderedDict({
+                Flags.LevelFlags.TL: 0,
+                Flags.LevelFlags.SL: 0,
+            }),
+        Flags.DistrFlags.InLen:
+            OrderedDict({
+                Flags.LevelFlags.TL: inp_seq_span.clone(),
+                Flags.LevelFlags.SL: inp_seq_span.clone(),
+            }),
+        Flags.DistrFlags.OutLen:
+            OrderedDict({
+                Flags.LevelFlags.TL: tgt_seq_span.clone(),
+                Flags.LevelFlags.SL: tgt_seq_span.clone(),
+            })
+    })
+    correct = deepcopy(template)
+    total = deepcopy(template)
+    err_rate = deepcopy(template)
+    accuracy = deepcopy(template)
+
+    result = OrderedDict({
+        Flags.MetricFlags.CORRECT : detach_result_map(correct),
+        Flags.MetricFlags.TOTAL : detach_result_map(total),
+        Flags.MetricFlags.ACC : detach_result_map(accuracy),
+        Flags.MetricFlags.ERR : detach_result_map(err_rate)
+    })
+
+    ret = OrderedDict()
+    ret[Flags.PredictionFlags.ORACLE] = deepcopy(result)
+    ret[Flags.PredictionFlags.NO_ORACLE] = result    
+    ret = {Flags.PredictionFlags.ORACLE: deepcopy(result),
+                Flags.PredictionFlags.NO_ORACLE: result}
+    
+    
+    return ret
+    
 def _evaluate_model_batchwise(model, test_data, test_loader, vocab, device="cpu", length_oracle=False):
     inp_len_max = test_data.command_length_span[1]
     tgt_len_max = test_data.action_sequence_span[1]
