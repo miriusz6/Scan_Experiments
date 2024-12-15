@@ -1,10 +1,10 @@
-from enum import Enum, auto
+from enum import IntEnum, auto
 import operator
 from experiments.experiment_type import ExperimentType
 from experiments.utils import merge_names
 
 
-class Flag(Enum):
+class Flag(IntEnum):
     # Metric Type
     CORRECT = auto()
     TOTAL = auto()

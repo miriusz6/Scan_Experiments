@@ -1,6 +1,6 @@
 from __future__ import annotations
 from experiments.experiment_type import ExperimentType
-from experiments.metric import Metric, MetricTemplate, Flags
+from experiments.metric import Metric, MetricTemplate, Flags, Flag
 from experiments.utils import merge_names
 import numpy as np
 import operator
@@ -55,7 +55,6 @@ class EvaluationResult:
         return [self.data[i] for i in indxs]
     
     def _unpack_data(self,data):
-        
         from experiments.utils import switch_dict_lvls, flatten_dict
         # D L M P
         groups = Flags.All
@@ -72,12 +71,20 @@ class EvaluationResult:
         data = switch_dict_lvls(data, proper_order)
         
         data = flatten_dict(data)
+
+        ret = [0]*self.lookup.shape[1]
         
-        return [Metric(v,self.experiment_name,self.experiment_type,list(k)) for k,v in data.items()]
         
+        for k,v in data.items():
+            key_lst = list(k)
+            m = Metric(v,self.experiment_name,self.experiment_type,[Flag(x) for x in key_lst])
+            t = MetricTemplate(flags= [Flag(x) for x in key_lst])
+            indx = self._find_index(t)[0]
+            ret[indx] = m
         
-    
-    
+        return ret
+        
+
     def print(self, scalars_only = True):
         if scalars_only:
             lst = self.get_data(MetricTemplate(flags=[Flags.DistrFlags.Avrg]))

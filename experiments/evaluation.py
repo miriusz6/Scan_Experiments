@@ -268,8 +268,8 @@ def _evaluate_model_batchwise(model, test_data, test_loader, vocab, device="cpu"
 
 
     
-    err_rate = calc_error_rate(correct, total)
-    accuracy = calc_acc(correct, total)
+    err_rate = calc_error_rate(correct, total,deepcopy(template))
+    accuracy = calc_acc(correct, total,deepcopy(template))
 
     result = {
         Flags.MetricFlags.CORRECT : detach_result_map(correct),
@@ -300,8 +300,8 @@ def evaluate_model_batchwise(model, test_data, test_loader, vocab, device="cpu")
     
     return result
 
-def calc_error_rate(correct, total):
-    err_rate = {}
+def calc_error_rate(correct, total, template):
+    err_rate = template
     # total - correct / total
     err_rate[Flag.Avrg][Flag.TL] = ((total[Flag.Avrg][Flag.TL]- correct[Flag.Avrg][Flag.TL])/ total[Flag.Avrg][Flag.TL])
     err_rate[Flag.Avrg][Flag.SL] = ((total[Flag.Avrg][Flag.SL]- correct[Flag.Avrg][Flag.SL]) / total[Flag.Avrg][Flag.SL])
@@ -311,8 +311,8 @@ def calc_error_rate(correct, total):
     err_rate[Flag.OutLen][Flag.SL] = torch.div((total[Flag.Avrg][Flag.SL] - correct[Flag.OutLen][Flag.SL]), total[Flag.Avrg][Flag.SL])
     return err_rate
 
-def calc_acc(correct, total):
-    acc = {}
+def calc_acc(correct, total, template):
+    acc = template
     # correct / total
     acc[Flag.Avrg][Flag.TL] = (correct[Flag.Avrg][Flag.TL]/ total[Flag.Avrg][Flag.TL])
     acc[Flag.Avrg][Flag.SL] = (correct[Flag.Avrg][Flag.SL] / total[Flag.Avrg][Flag.SL])
