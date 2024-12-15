@@ -1,62 +1,142 @@
 from enum import Enum, auto
+from abc import ABC
 import operator
-from experiments.experiment import ExperimentType
+#from experiments.experiment import ExperimentType
 from experiments.utils import merge_names
 
-class OracleFlag(Enum):
-    ORACLE = auto()
-    NO_ORACLE = auto()
+class ExperimentType(Enum):
+    pass
 
-class MetricType(Enum):
+class Flag(Enum):
+    # Metric Type
     CORRECT = auto()
     TOTAL = auto()
     ACC = auto()
     ERR = auto()
-
-class MetricFlag(Enum):
+    # Level Type
     TL = auto()
     SL = auto()
-    TLIL = auto()
-    SLIL = auto()
-    TLOL = auto()
-    SLOL = auto()
+    # Distr Type
+    InLen = auto()
+    OutLen = auto()
+    Avrg = auto()
+    # Prediction Type
+    ORACLE = auto()
+    NO_ORACLE = auto()
+
+    @staticmethod
+    def get__all_flags():
+        return [f for f in Flag]
+
     
-    @classmethod
-    def get_scalar_flags(cls):
-        return [cls.TL, cls.SL]
-    @classmethod
-    def get_array_flags(cls):
-        return [cls.TLIL, cls.SLIL, cls.TLOL, cls.SLOL]
+    def __str__(self):
+        return self.name
+    
+    def __repr__(self):
+        return self.__str__()
+
+class FlagSubClass():
+    _all = []
+
+    def belong(self, flag: Flag):
+        return flag in self._all
+    @property
+    def All(self):
+        self._all.sort(key=lambda x: x.value)
+        return self._all
+
+class _PredictionFlags(FlagSubClass):
+    ORACLE = Flag.ORACLE
+    NO_ORACLE = Flag.NO_ORACLE
+    _all = [ORACLE, NO_ORACLE]
+
+    def __str__(self):
+        return self.__class__.__name__
+    def __repr__(self):
+        return self.__str__()
+
+class _MetricFlags(FlagSubClass):
+    CORRECT = Flag.CORRECT
+    TOTAL = Flag.TOTAL
+    ACC = Flag.ACC
+    ERR = Flag.ERR
+    _all = [CORRECT, TOTAL, ACC, ERR]
+
+    def __str__(self):
+        return self.__class__.__name__
+    def __repr__(self):
+        return self.__str__()
+
+class _LevelFlags(FlagSubClass):
+    TL = Flag.TL
+    SL = Flag.SL
+    _all = [TL, SL]
+
+    def __str__(self):
+        return self.__class__.__name__
+    def __repr__(self):
+        return self.__str__()
+    
+class _DistrFlags(FlagSubClass):
+    InLen = Flag.InLen
+    OutLen = Flag.OutLen
+    Avrg = Flag.Avrg
+    _all = [InLen, OutLen, Avrg]
+
+    def __str__(self):
+        return self.__class__.__name__
+    def __repr__(self):
+        return self.__str__()
     
 
-class Flag():
-    OracleFlag = OracleFlag
-    Metric = MetricFlag
-    MetricType = MetricType
+class _Flags():
+    PredictionFlags = _PredictionFlags()
+    MetricFlags = _MetricFlags()
+    LevelFlags = _LevelFlags()
+    DistrFlags = _DistrFlags()
+    _all = [PredictionFlags, MetricFlags, LevelFlags, DistrFlags]
+    
+    def group_flags(self, flags: list[Flag]):
+        ret = {}
+        groups = self._all
+        for g in groups:
+            ret[g] = [f for f in flags if f in g.All]
+        return ret
+    
+    @property
+    def All(self):
+        self._all.sort(key=str)
+        return self._all
+    
+    def __str__(self):
+        s = "Avaiable Flag Groups: \n"
+        for f in self._all:
+            s += f"{f}\n"
+        return s
+    
+    def __repr__(self):
+        return self.__str__()
+        
+Flags = _Flags()
 
-F = Flag()
+
+
 
 class MetricTemplate():
     def __init__(self,
                  e_types: list[ExperimentType] = None,
-                 o_flags: list[OracleFlag] = None,
-                 m_flags: list[MetricFlag] = None,
-                 m_types: list[MetricType] = None):
+                 flags: list[Flag] = None):
         self.e_types = e_types
-        self.o_flags = o_flags
-        self.m_flags = m_flags
-        self.m_types = m_types
+        self._flags = flags#.sort(key=lambda x: x.value)
     
     @property
     def flags(self):
-        return {self.o_flags, self.m_flags, self.m_types}
+        return self._flags
     
     @property
     def flagsS(self):
         s = ""
-        s += [s.join(f.name) for f in self.o_flags]
-        s += [s.join(f.name) for f in self.m_flags]
-        s +=[s.join(f.name) for f in self.m_types]
+        [s.join(f"{f.name} ") for f in self._flags]
         return s
     
     def __str__(self):
@@ -65,108 +145,114 @@ class MetricTemplate():
     def __repr__(self):
         return self.__str__()
 
-class Metric():
-    def __init__(self, val, e_name:str, e_type: ExperimentType, o_flag: OracleFlag, m_flag: MetricFlag, m_type: MetricType):
-        self._val = val
-        self.e_type = e_type
-        if not e_name.startswith("(") and not e_name == "MIXED": 
-            e_name = f"(ORG){e_name}"
-        self.e_name = e_name
-        self.o_flag = o_flag
-        self.m_flag = m_flag
-        self.m_type = m_type
+# class Metric():
+#     def __init__(self, val, e_name:str, e_type: ExperimentType, flags: list[Flag]):
+#         self._val = val
+#         self.e_type = e_type
+#         self.e_name = e_name
+#         if not self.e_name.startswith("(") and not self.e_name == "MIXED": 
+#             self.e_name = f"(ORG){self.e_name}"
+#         self.flags = flags.sort(key=lambda x: x.value)
 
-    @property
-    def val(self):
-        return self._val
+#     @property
+#     def val(self):
+#         return self._val
 
-    @property
-    def flags(self):
-        return (self.o_flag, self.m_flag, self.m_type)
+#     @property
+#     def flags(self):
+#         return self.flags
     
-    @property
-    def flagsS(self):
-        return f"{self.o_flag.name} {self.m_flag.name} {self.m_type.name}"
+#     @property
+#     def flagsS(self):
+#         return " ".join([f"{f.name} " for f in self.flags])
 
 
-    def __str__(self):
-        return f"{self.e_name} {self.e_type.name} {self.m_type.name} {self.m_flag.name} {self.o_flag.name}: {self.val}"
+#     def __str__(self):
+#         return f"{self.e_name} {self.e_type.name} {self.flagsS} : {self.val}"
     
-    def __repr__(self):
-        return self.__str__()
+#     def __repr__(self):
+#         return self.__str__()
 
-    def _update_modifiers(self, name, new_mod:str):
-        i = name.find(")")
-        mods = name[1:i]
-        if mods == "ORG":
-            return f"({new_mod}"+name[i:]
-        return '(' + new_mod +','+  name[1:]
+#     def _update_modifiers(self, name, new_mod:str):
+#         i = name.find(")")
+#         mods = name[1:i]
+#         if mods == "ORG":
+#             return f"({new_mod}"+name[i:]
+#         return '(' + new_mod +','+  name[1:]
 
-    def __lt__(self, other):
-        if isinstance(other, Metric):
-            return self.val < other.val
-        return self.val < other
+#     def __lt__(self, other):
+#         if isinstance(other, Metric):
+#             return self.val < other.val
+#         return self.val < other
     
-    def __le__(self, other):
-        if isinstance(other, Metric):
-            return self.val <= other.val
-        return self.val <= other
+#     def __le__(self, other):
+#         if isinstance(other, Metric):
+#             return self.val <= other.val
+#         return self.val <= other
     
-    def __eq__(self, other):
-        if isinstance(other, Metric):
-            return self.val == other.val
-        return self.val == other
+#     def __eq__(self, other):
+#         if isinstance(other, Metric):
+#             return self.val == other.val
+#         return self.val == other
     
-    def __ne__(self, other):
-        if isinstance(other, Metric):
-            return self.val != other.val
-        return self.val != other
+#     def __ne__(self, other):
+#         if isinstance(other, Metric):
+#             return self.val != other.val
+#         return self.val != other
     
-    def __gt__(self, other):
-        if isinstance(other, Metric):
-            return self.val > other.val
-        return self.val > other
+#     def __gt__(self, other):
+#         if isinstance(other, Metric):
+#             return self.val > other.val
+#         return self.val > other
     
-    def __ge__(self, other):
-        if isinstance(other, Metric):
-            return self.val >= other.val
-        return self.val >= other
+#     def __ge__(self, other):
+#         if isinstance(other, Metric):
+#             return self.val >= other.val
+#         return self.val >= other
     
+#     def _smth(self,other, oper, mod:str):
+#         if not isinstance(other, Metric):
+#             new_name = self._update_modifiers(self.e_name, mod)
+#             new_val = oper(self.val, other)
+#             return Metric(new_val, new_name, self.e_type, self.flags)
+#         new_name = merge_names(self.e_name, other.e_name)
+#         new_name = self._update_modifiers(new_name, mod)
+#         new_val = oper(self.val, other.val)
+#         if other.e_type == self.e_type:
+#             new_type = self.e_type
+#         else:
+#             new_type = ExperimentType.MIX
+#         return Metric(new_val, new_name, new_type, self.flags)    
+    
+#     def __add__(self, other):
+#         return self._smth(other, operator.add, "ADD")
+    
+#     def __sub__(self, other):
+#         return self._smth(other, operator.sub, "SUB")
+    
+#     def __mul__(self, other):
+#         return self._smth(other, operator.mul, "MUL")
+    
+#     def __truediv__(self, other):
+#         return self._smth(other, operator.truediv, "DIV")
+    
+#     def __floordiv__(self, other):
+#         return self._smth(other, operator.floordiv, "FDIV")
+    
+#     def __mod__(self, other):
+#         return self._smth(other, operator.mod, "MOD")
+    
+#     def __pow__(self, other):
+#         return self._smth(other, operator.pow, "POW")
+    
+# class ScanMetric(Metric):
+#     def __init__(self, val, e_name:str, e_type: ExperimentType, flags: list[Flag]):
 
-    def _smth(self,other, oper, mod:str):
-        if not isinstance(other, Metric):
-            new_name = self._update_modifiers(self.e_name, mod)
-            new_val = oper(self.val, other)
-            return Metric(new_val, new_name, self.e_type, self.o_flag, self.m_flag, self.m_type)
-        new_name = merge_names(self.e_name, other.e_name)
-        new_name = self._update_modifiers(new_name, mod)
-        new_val = oper(self.val, other.val)
-        if other.e_type == self.e_type:
-            new_type = self.e_type
-        else:
-            new_type = ExperimentType.MIX
-        return Metric(new_val, new_name, new_type, self.o_flag, self.m_flag, self.m_type)
-        
-    
-    def __add__(self, other):
-        return self._smth(other, operator.add, "ADD")
-    
-    def __sub__(self, other):
-        return self._smth(other, operator.sub, "SUB")
-    
-    def __mul__(self, other):
-        return self._smth(other, operator.mul, "MUL")
-    
-    def __truediv__(self, other):
-        return self._smth(other, operator.truediv, "DIV")
-    
-    def __floordiv__(self, other):
-        return self._smth(other, operator.floordiv, "FDIV")
-    
-    def __mod__(self, other):
-        return self._smth(other, operator.mod, "MOD")
-    
-    def __pow__(self, other):
-        return self._smth(other, operator.pow, "POW")
-    
+#         f_groups = Flags.group_flags(flags)
+#         # Check if only one flag of each group is present
+#         single_flags = [len(vals) == 1 for vals in f_groups.values()]
+#         if sum(single_flags) != len(f_groups.values()):
+#             raise ValueError("Only one flag of each group is _allowed")
+
+#         super().__init__(val, e_name, e_type, flags)
         
