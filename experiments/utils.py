@@ -18,6 +18,36 @@ def get_common_prefix( lst: list[str]) -> str:
 var_fillers = list(range(ord('Z'), ord('A') - 1, -1))
 var_fillers = [chr(f) for f in var_fillers]
 
+def remove_vars(s:str):
+    varsS = get_curr_fillers(s)
+    return s[:-len(varsS)-2]
+
+
+def remove_mods(s:str):
+    modsS = get_mods(s)
+    if modsS == "":
+        #print("No mods")
+        return s
+    mods = modsS.split(",")
+
+    varsS = get_curr_fillers(s)
+    if varsS == "":
+        #print("No vars")
+        return s[len(modsS)+2:]
+
+    vars = varsS.split(",")
+
+    #print(f"Mods: {mods}")
+    #print(f"Vars: {vars}")
+
+    for mod in mods:
+        if mod in vars:
+            vars.remove(mod)
+    s = remove_vars(s)
+    return s[len(modsS)+2:] + "["+",".join(vars)+"]"
+    
+
+
 def get_curr_fillers(s):
     fls_st = s.find('[')
     fls_end = s.find(']')
@@ -26,6 +56,13 @@ def get_curr_fillers(s):
     #fls = s[fls_st+1:fls_end].split(',')
     fls = s[fls_st+1:fls_end]
     return fls
+
+def get_mods(s):
+    mods_st = s.find('(')
+    mods_end = s.find(')')
+    if mods_st == -1 or mods_end == -1:
+        return ""
+    return s[mods_st+1:mods_end]
 
 def cut_fillers(s):
     fls_st = s.find('[')

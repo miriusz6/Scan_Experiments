@@ -4,6 +4,8 @@ import operator
 from experiments.experiment_type import ExperimentType
 from experiments.utils import merge_names
 import numpy as np
+from experiments.utils import remove_mods, remove_vars
+
 
 class Flag(IntEnum):
     # Metric Type
@@ -152,11 +154,13 @@ class MetricTemplate():
         return self.__str__()
 
 class Metric():
+    print_mods = True
+    print_vars = True
     def __init__(self, val, e_name:str, e_type: ExperimentType, flags: list[Flag]):
-        self._val = None
-        self._flags = None
-        self._e_type = None
-        self._e_name = None
+        # self._val = None
+        # self._flags = None
+        # self._e_type = None
+        # self._e_name = None
         
         self._val = val
         self.e_type = e_type
@@ -191,6 +195,13 @@ class Metric():
     def flagsS(self):
         return " ".join([f"{f.name} " for f in self.flags])
     
+    # def get_name(mods = False, vars = False):
+    #     if mods:
+    #         return self.e_name
+    #     if vars:
+    #         return self.e_name[1:]
+    #     return self.e_name
+    
     @classmethod
     def to_dict(cls, metric:Metric):
         v = metric.val
@@ -206,8 +217,20 @@ class Metric():
         return Metric(v, d["e_name"], ExperimentType(d["e_type"]), [Flag(f) for f in d["flags"]])
 
 
+    @property
+    def name(self):
+        return self.__str__()
+    
     def __str__(self):
-        return f"{self.e_name} {self.e_type.name} {self.flagsS} : {self.val}"
+        name = self.e_name
+        #if cls.print_mods and cls.print_vars:
+        if not Metric.print_vars:
+            name = remove_vars(name)    
+        if not Metric.print_mods:
+            name = remove_mods(name)
+        return f"{name} {self.e_type.name} {self.flagsS} : {self.val}"
+
+
     
     def __repr__(self):
         return self.__str__()
