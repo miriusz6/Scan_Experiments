@@ -85,6 +85,7 @@ class E1_Config(ExperimentConfig):
                 dropout=0.05,
                 learning_rate=7e-4,
                 batch_size=64,
+                epochs=25,
                 )
     
 class E2_Config(ExperimentConfig):
@@ -94,6 +95,7 @@ class E2_Config(ExperimentConfig):
                 dropout=0.15,
                 learning_rate=2e-4,
                 batch_size=16,
+                epochs=30
                 )
 
 class E3_Config(ExperimentConfig):
@@ -103,4 +105,5 @@ class E3_Config(ExperimentConfig):
                 dropout=0.15,
                 learning_rate=2e-4,
                 batch_size=16,
+                epochs=20
                 )

@@ -109,20 +109,25 @@ class ExperimentType(IntEnum):
                     "test": os.path.join(CURR_DIR, "dataset/data/length_split/tasks_test_length.txt")}
 
     def _E3_paths(self):
-        # WORK IN PROGRESS
         E_3_base = os.path.join(CURR_DIR, "dataset/data/add_prim_split")
-        E_3_3_base = os.path.join(E_3_base, "with_additional_examples")
-        #E_3_3_train_name = lambda i: E_3_3_base + f"/tasks_train_addprim_complex_jump_num{i}_rep1.txt"
         if self == ExperimentType.E_3_1:
             return {"train": os.path.join(E_3_base, "tasks_train_addprim_turn_left.txt"),
                     "test": os.path.join(E_3_base, "tasks_test_addprim_turn_left.txt")}
         elif self == ExperimentType.E_3_2:
             return {"train": os.path.join(E_3_base, "tasks_train_addprim_jump.txt"),
                     "test": os.path.join(E_3_base, "tasks_test_addprim_jump.txt")}
-        # elif self == ExperimentType.E_3_3_1:
-        #     return {"train": os.path.join(E_3_3_base, "tasks_train_addprim_complex_jump_num1_rep1.txt"),
-        #             "test": os.path.join(E_3_3_base, "tasks_test_addprim_complex_jump_num1_rep1.txt")}
-        
+        else:
+            E_3_3_base = os.path.join(E_3_base, "with_additional_examples")
+            base = os.path.join(E_3_base, E_3_3_base)
+            sub_grps = self.name.split("_")
+            add_expl = sub_grps[-2]
+            rep = sub_grps[-1]
+
+            train_tail = "tasks_train_addprim_complex_jump_num" + add_expl + "_rep"+rep+".txt"
+            test_tail = "tasks_test_addprim_complex_jump_num" + add_expl + "_rep"+rep+".txt"
+            return {"train": os.path.join(base, train_tail),
+                    "test": os.path.join(base, test_tail)}
+
 
     def get_data_paths(self):
         if self.name.startswith("E_1"):
@@ -133,7 +138,20 @@ class ExperimentType(IntEnum):
             return self._E3_paths()
         else:
             raise ValueError("Invalid experiment type")
-  
+
+from experiments.experiment_config import E1_Config, E2_Config, E3_Config
+
+
+def get_config(e:ExperimentType):
+    if e.name.startswith("E_1"):
+        return E1_Config()
+    elif e.name.startswith("E_2"):
+        return E2_Config()
+    elif e.name.startswith("E_3"):
+        return E3_Config()
+    else:
+        raise ValueError("Invalid experiment type")
+
 
 def get_experiments_in_group(group:str):
         """

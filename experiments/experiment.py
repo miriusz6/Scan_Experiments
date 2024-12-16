@@ -44,7 +44,7 @@ class Experiment():
         
         self.use_TB = config.use_tensorboard
         if self.use_TB:
-            self.tensorboard_path = self._mk_path(config.tensorboard_log_path,True)
+            self.tensorboard_path = self._mk_path(config.tensorboard_log_path,False)
         else:
             self.writer = None
 
