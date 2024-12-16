@@ -1,6 +1,6 @@
 from __future__ import annotations
 from experiments.experiment_type import ExperimentType
-from experiments.metric import Metric, MetricFlag, MetricType, OracleFlag, MetricTemplate
+from experiments.metric import Metric, MetricTemplate, Flags, Flag
 from experiments.utils import merge_names
 import numpy as np
 import operator
@@ -9,26 +9,22 @@ import operator
 class EvaluationResult:
     @staticmethod
     def _mk_lookup():
-        oracle_flags = len(OracleFlag)
-        flags = len(MetricType)
-        metrics = len(MetricFlag)
-        metrics_numb = oracle_flags * flags * metrics
-        lookup = np.empty((4,metrics_numb), dtype=object)
-        o = flags * metrics
-        for i,of in enumerate(OracleFlag):
-            p1 = lookup[:,i*o:(i+1)*o]
-            p1[0,:] = of
-            # second column
-            for j,m in enumerate(MetricType):
-                p2 = p1[:,j*metrics:(j+1)*metrics]
-                p2[1,:] = m
-                # third column
-                for k,f in enumerate(MetricFlag):
-                    p2[2,k] = f
-
-            lookup[:,i*o:(i+1)*o] = p1
-        lookup[3,:] =  np.arange(0,metrics_numb)
-        return lookup
+        f_groups = Flags.All
+        # all flags by group
+        all_f_grouped = [f.All for f in f_groups]
+        # number of metrics in whole lookup
+        metrics_numb = np.prod([len(f) for f in all_f_grouped])
+        # create grid of all possible combinations
+        # of flags, each column is a flag group,
+        # last column is index of metric
+        grid = np.meshgrid(*all_f_grouped)
+        grid = [np.ravel(x) for x in grid]
+        grid = np.array(grid)
+        print(grid.shape)
+        grid = np.array(grid)
+        indxs = np.arange(metrics_numb)
+        grid = np.vstack([grid,indxs])
+        return grid
     
     lookup = _mk_lookup()
 
@@ -44,42 +40,62 @@ class EvaluationResult:
 
     @classmethod
     def _find_index(cls, template: MetricTemplate):
-        oracle_flags = template.o_flags
-        metric_types = template.m_types
-        metric_flags = template.m_flags
+        f_grouped = Flags.group_flags(template.flags)
+        # if no flags in a group, add all flags of that group
+        [f_grouped.update({k:k.All}) if len(v) == 0 else None for k,v in f_grouped.items()]
         
-        o_indxs = np.ones(cls.lookup[0].shape, dtype=bool)
-        f_indxs = np.ones(cls.lookup[1].shape, dtype=bool)
-        t_indxs = np.ones(cls.lookup[2].shape, dtype=bool)
-        
-        if oracle_flags is not None:
-            o_indxs = np.isin(cls.lookup[0],oracle_flags, assume_unique=True)
-        if metric_types is not None:
-            t_indxs = np.isin(cls.lookup[1],metric_types, assume_unique=True)
-        if metric_flags is not None:
-            f_indxs = np.isin(cls.lookup[2],metric_flags, assume_unique=True)
-        indxs = np.where(o_indxs & f_indxs & t_indxs, True, False)
-        indxs = cls.lookup[3][indxs]
-        return indxs
+        indxs = np.full(cls.lookup.shape[1], True)
+        for i,flags_in_group in enumerate(f_grouped.values()):
+            hits = np.isin(cls.lookup[i],flags_in_group, assume_unique=True)
+            indxs = indxs & hits
+        return cls.lookup[-1][indxs]
     
     def get_data(self, template: MetricTemplate):
         indxs = self._find_index(template)
-        return [self.data[i] for i in indxs]
+        ret = []
+        for i in indxs:
+            m = self.data[i]
+            # if is a metric
+            if m:
+                ret.append(m)
+        return ret
+
+        
     
     def _unpack_data(self,data):
-        d = []
-        e = self.experiment_type
-        en = self.experiment_name
-        for of in OracleFlag:
-            for m in MetricType:
-                for f in MetricFlag:
-                    data_point = Metric(data[of][m][f],en,e, of, f, m)
-                    d.append(data_point)
-        return d
+        from experiments.utils import switch_dict_lvls, flatten_dict
+        # D L M P
+        groups = Flags.All
+        curr_d_lvl = data
+        # P M D L
+        order = []
+        for _ in groups:
+            k = list(curr_d_lvl.keys())[0]
+            order.append(Flags.get_group(k))
+            curr_d_lvl = curr_d_lvl[k]
+        # 3 2 0 1
+        proper_order = [order.index(g) for g in groups]
+        
+        data = switch_dict_lvls(data, proper_order)
+        
+        data = flatten_dict(data)
+
+        ret = [0]*self.lookup.shape[1]
+        
+        
+        for k,v in data.items():
+            key_lst = list(k)
+            m = Metric(v,self.experiment_name,self.experiment_type,[Flag(x) for x in key_lst])
+            t = MetricTemplate(flags= [Flag(x) for x in key_lst])
+            indx = self._find_index(t)[0]
+            ret[indx] = m
+        
+        return ret
+        
+
     def print(self, scalars_only = True):
         if scalars_only:
-            fs = MetricFlag.get_scalar_flags()
-            lst = self.get_data(MetricTemplate(m_flags=fs))
+            lst = self.get_data(MetricTemplate(flags=[Flags.DistrFlags.Avrg]))
         else:
             lst = self.data
         print(self.__str__())
@@ -95,9 +111,25 @@ class EvaluationResult:
         else:
             new_data = [oper(a,other) for a in self.data]
             return EvaluationResult(new_data, self.experiment_name, self.experiment_type)
-
-       
-
+        
+    @classmethod
+    def to_dict(cls, eval_result: EvaluationResult):
+        d = {}
+        for i,m in enumerate(eval_result.data):
+            if isinstance(m, Metric):
+                d[i] = Metric.to_dict(m)
+            else:
+                d[i] = m
+        return {"e_name": eval_result.experiment_name, "e_type": eval_result.experiment_type.value, "data": d}
+    
+    @classmethod
+    def from_dict(cls,d: dict):
+        data = d["data"]
+        data = [Metric.from_dict(v) if isinstance(v, dict) else v for v in data.values()]
+        e_name = d["e_name"]
+        e_type = ExperimentType( d["e_type"])
+        return EvaluationResult(data, e_name, e_type)
+    
     def __str__(self):
         return f"Experiment: {self.experiment_name} Results, Type: {self.experiment_type.name}"
 

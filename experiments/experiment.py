@@ -3,6 +3,7 @@ import os
 from tensorboardX import SummaryWriter
 from tqdm import tqdm
 import pickle
+import json
 # TORCH
 import torch
 from torch.utils.data import DataLoader
@@ -43,7 +44,7 @@ class Experiment():
         
         self.use_TB = config.use_tensorboard
         if self.use_TB:
-            self.tensorboard_path = self._mk_path(config.tensorboard_log_path,True)
+            self.tensorboard_path = self._mk_path(config.tensorboard_log_path,False)
         else:
             self.writer = None
 
@@ -183,8 +184,10 @@ class Experiment():
         eval_interval = self.config.evaluation_interval
 
         fold_info = ""
+        tb_fold_info = ""
         if self.use_k_fold:
             fold_info = f"_fold_{self.current_fold+1}/{self.folds}"
+            tb_fold_info = f"/fold{self.current_fold+1}"
 
         if self.config.detailed_logging:
             print("Training started for experiment: ", self.e_type.name, fold_info)
@@ -223,7 +226,7 @@ class Experiment():
                 self.result_container.append_results(result)
             
             if self.use_TB:
-                self.writer.add_scalar(tag = 'Loss/train',
+                self.writer.add_scalar(tag = 'TrainLoss'+tb_fold_info,
                                     scalar_value = total_loss,
                                     global_step = epoch)
             
@@ -243,13 +246,15 @@ class Experiment():
     
     def save_results(self, path = "", overwrite = False):
         if path == "":
-            path = self._mk_path(self.config.results_dict_path,overwrite,ext=".data")
+            path = self._mk_path(self.config.results_dict_path,overwrite,ext=".json")
         else:
             path = self._mk_path(path, overwrite)
 
         print("Evaluation results will be saved at: ", path)
-        with open(path, "wb") as f:
-            pickle.dump(self.result_container, f)
+        d = EvaluationResultContainer.to_dict(self.result_container)
+        with open(path, "w") as f:
+            json.dump(d,f,indent=4)
+            
 
     def run(self):
         print("-"*50)

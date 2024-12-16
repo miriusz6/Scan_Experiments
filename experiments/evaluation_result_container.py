@@ -1,7 +1,7 @@
 from __future__ import annotations
 from experiments.evaluation_result import EvaluationResult
 from experiments.metric import MetricTemplate
-
+import re
 
 
 class EvaluationResultContainer():
@@ -44,6 +44,31 @@ class EvaluationResultContainer():
             for e in self.results_map.keys():
                 data += self.results_map[e].get_data(template)
         return data
+    
+    def filter_by_exp_name(self, pattern:str):
+        matches = [re.match(pattern,r.experiment_name,re.RegexFlag.DOTALL) for r in self.results]
+        ret = []
+        for i,m in enumerate(matches):
+            if m:
+                ret.append(self.results[i])
+        return EvaluationResultContainer(ret)
+    
+    # def filter_by_exp_name(self, common_substr:str, excluding_substr:str = ""):
+    #     ret = [r for r in self.results if common_substr in r.experiment_name]
+    #     if excluding_substr:
+    #         ret = [r for r in ret if excluding_substr not in r.experiment_name]
+    #     return EvaluationResultContainer(ret)
+
+
+    @classmethod
+    def from_dict(cls, d:dict):
+        results = [EvaluationResult.from_dict(v) for v in d["results"]]
+        return EvaluationResultContainer(results)
+    
+    @classmethod
+    def to_dict(cls, container:EvaluationResultContainer):
+        results = [EvaluationResult.to_dict(v) for v in container.results]
+        return {"results": results}
 
 
     def __str__(self):
@@ -67,15 +92,17 @@ class EvaluationResultContainer():
     
     def __add__(self, other):
         if isinstance(other, EvaluationResultContainer):
-            return EvaluationResultContainer(self.results + other.results)
+            new_res = [ x + y for x,y in zip(self.results, other.results)]
+            return EvaluationResultContainer(new_res)
         else:
-            return EvaluationResultContainer(self.results + [other])
+            return EvaluationResultContainer([r + other for r in self.results])
     
     def __sub__(self, other):
         if isinstance(other, EvaluationResultContainer):
-            return EvaluationResultContainer([r for r in self.results if r not in other.results])
+            new_res = [ x - y for x,y in zip(self.results, other.results)]
+            return EvaluationResultContainer(new_res)
         else:
-            return EvaluationResultContainer([r for r in self.results if r != other])
+            return EvaluationResultContainer([r - other for r in self.results])
         
     def __mul__(self, other):
         if isinstance(other, EvaluationResultContainer):
