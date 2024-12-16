@@ -53,11 +53,8 @@ class EvaluationResultContainer():
                 ret.append(self.results[i])
         return EvaluationResultContainer(ret)
     
-    # def filter_by_exp_name(self, common_substr:str, excluding_substr:str = ""):
-    #     ret = [r for r in self.results if common_substr in r.experiment_name]
-    #     if excluding_substr:
-    #         ret = [r for r in ret if excluding_substr not in r.experiment_name]
-    #     return EvaluationResultContainer(ret)
+    def filter_by_exp_type(self, e_type):
+        return EvaluationResultContainer([r for r in self.results if r.experiment_type == e_type])
 
 
     @classmethod
@@ -72,7 +69,10 @@ class EvaluationResultContainer():
 
 
     def __str__(self):
-        return f"Experiment Results Container: {self.result_names}"
+        s = "Experiment Results Container:\n"
+        for r in self.results:
+            s += str(r) + "\n"
+        return s
     
     def __repr__(self):
         return self.__str__()

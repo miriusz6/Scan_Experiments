@@ -4,8 +4,8 @@ import re
 from experiments.evaluation_result import EvaluationResult
 from experiments.evaluation_result_container import EvaluationResultContainer
 from experiments.metric import MetricTemplate, Flags
-from experiments.evaluation_statistics import  aggregate_evaluation_by_subname
-from experiments.evaluation_statistics import aggregate_evaluation_by_subname
+from experiments.evaluation_statistics import  aggregate_by_subname
+from experiments.evaluation_statistics import aggregate_by_subname
 
 def prepare_scalars_for_plot(
                       results:EvaluationResultContainer|EvaluationResult, 
@@ -25,6 +25,7 @@ def prepare_scalars_for_plot(
     xtics = np.arange(len(data))
     return xs, ys, x_lables, xtics
 
+
 def plot_k_fold_reps(ax,
                     rep1:EvaluationResultContainer,
                     rep2:EvaluationResultContainer,
@@ -33,11 +34,11 @@ def plot_k_fold_reps(ax,
                      ):
 
     # averages over three folds
-    rep1_fld_avrg = aggregate_evaluation_by_subname([rep1], id_sub_name="fold", id_range=(1, 3), reps=1)
-    rep2_fld_avrg = aggregate_evaluation_by_subname([rep2], id_sub_name="fold", id_range=(1, 3), reps=1)
-    rep3_fld_avrg = aggregate_evaluation_by_subname([rep3], id_sub_name="fold", id_range=(1, 3), reps=1)
+    rep1_fld_avrg = aggregate_by_subname([rep1], id_sub_name="fold", id_range=(1, 3), reps=1)
+    rep2_fld_avrg = aggregate_by_subname([rep2], id_sub_name="fold", id_range=(1, 3), reps=1)
+    rep3_fld_avrg = aggregate_by_subname([rep3], id_sub_name="fold", id_range=(1, 3), reps=1)
     # averages over the three repetitions of the 3-fold cross validation
-    rep_avrg_fld_avrg = aggregate_evaluation_by_subname([rep1,rep2,rep3], id_sub_name="fold", id_range=(1, 3), reps=3)
+    rep_avrg_fld_avrg = aggregate_by_subname([rep1,rep2,rep3], id_sub_name="fold", id_range=(1, 3), reps=3)
 
     # prepare scalars
     xs_patt = r"(?<=epoch_)[0-9]+"
@@ -128,7 +129,7 @@ def mk_fig(f3_r1, f3_r2, f3_r3):
 
     
     xs_patt = r"(?<=epoch_)[0-9]+"
-    rep_avrg_fld_avrg = aggregate_evaluation_by_subname([f3_r1, f3_r2, f3_r3], id_sub_name="fold", id_range=(1, 3), reps=3)
+    rep_avrg_fld_avrg = aggregate_by_subname([f3_r1, f3_r2, f3_r3], id_sub_name="fold", id_range=(1, 3), reps=3)
 
     xs, ys, x_lables, xtics = prepare_scalars_for_plot(rep_avrg_fld_avrg,err_tok_temp, x_lbls_re_patt=xs_patt)
     ax_err_by_flags.plot(xs,ys,  linestyle='-', color='green', label=str(err_tok))
@@ -152,3 +153,33 @@ def mk_fig(f3_r1, f3_r2, f3_r3):
     ax_err_by_flags.legend()
 
     return fig, axs
+
+
+
+def mk_bar_plot(ax:plt.axes, 
+                data:EvaluationResultContainer,
+                temp:MetricTemplate,
+                x_lbls= None,
+                coords_txt = True,
+                h_lines = True,
+                bar_kwrgs = None
+                ):
+    xs, ys, x_lables, xtics = prepare_scalars_for_plot(results= data*100,
+                                                   template= temp, 
+                                                   x_lables=x_lbls,)                      
+    # ys.append(ys[0])
+    # ys = ys[1:]
+    points = len(ys)
+
+    if bar_kwrgs is None:
+        bar_kwrgs = {}
+
+    ax.bar(xs, ys, **bar_kwrgs)
+    if h_lines:
+        ax.hlines([20,40,60,80,100],xmin=-0.5, xmax=points-0.5, colors = "grey", alpha = 0.5)
+    if coords_txt:
+        for i in range(len(ys)):
+            ax.text(xs[i], ys[i], f"{ys[i]:.2f}", ha='center', va='bottom')
+    ax.set_xlim(-0.5,points-0.5)
+    ax.set_xticks(xtics)
+    ax.set_xticklabels(x_lables)

@@ -1,7 +1,9 @@
 from experiments.evaluation_result_container import EvaluationResultContainer
+from experiments.experiment_type import ExperimentType
+from experiments.metric import MetricTemplate
 import numpy as np
 
-def aggregate_evaluation_by_subname(containers:list[EvaluationResultContainer], id_sub_name:str, id_range:tuple, reps = 1):
+def aggregate_by_subname(containers:list[EvaluationResultContainer], id_sub_name:str, id_range:tuple, reps = 1):
     """
     Aggregates evaluation results by a specified subname and range.
     First calculates the average of the repetitions (if any) and then groups
@@ -59,3 +61,25 @@ def aggregate_evaluation_by_subname(containers:list[EvaluationResultContainer], 
     #     avrg += divided[i]
     # avrg /= len(divided)
     return EvaluationResultContainer(avrg)
+
+
+
+def aggregate_by_exp_type(containers:list[EvaluationResultContainer]):
+    """
+    Aggregates evaluation results by experiment type.
+    Args:
+        containers (list[EvaluationResultContainer]): A list of EvaluationResultContainer objects to aggregate.
+    Returns:
+        EvaluationResultContainer: An EvaluationResultContainer object containing the aggregated evaluation results.
+    """
+    # get unique experiment types
+    d = {}
+    types = [d.update({e.experiment_type:None}) for e in containers]
+    types = list(d.keys())
+    types.sort()
+    avrgs = []
+    for e_type in types:
+        sub_group = containers.filter_by_exp_type(e_type)
+        avrg = np.mean(sub_group, axis=0)
+        avrgs.append(avrg)
+    return EvaluationResultContainer(avrgs)

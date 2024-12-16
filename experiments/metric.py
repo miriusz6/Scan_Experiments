@@ -2,9 +2,9 @@ from __future__ import annotations
 from enum import IntEnum, auto
 import operator
 from experiments.experiment_type import ExperimentType
-from experiments.utils import merge_names
+from experiments.metric_utils import merge_names
 import numpy as np
-from experiments.utils import remove_mods, remove_vars
+from experiments.metric_utils import remove_mods, remove_vars
 
 
 class Flag(IntEnum):
@@ -165,7 +165,7 @@ class Metric():
         self._val = val
         self.e_type = e_type
         self.e_name = e_name
-        if not self.e_name.startswith("(") and not self.e_name == "MIXED": 
+        if not self.e_name.startswith("(") and not self.e_name == ExperimentType.UNDEF.name: 
             self.e_name = f"(ORG){self.e_name}"
         self._flags = flags
         f_groups = Flags.group_flags(flags)
@@ -183,7 +183,7 @@ class Metric():
     
     @val.setter
     def val(self, v):
-        if not self.e_name.startswith("(") and not self.e_name == "MIXED": 
+        if not self.e_name.startswith("(") and not self.e_name == ExperimentType.UNDEF.name: 
             self.e_name = f"(MOD){self.e_name}"
         self._val = v
 
@@ -221,10 +221,14 @@ class Metric():
     def name(self):
         return self.__str__()
     
+    def to_template(self):
+        return MetricTemplate(flags=[self.flags])
+    
+
     def __str__(self):
         name = self.e_name
         #if cls.print_mods and cls.print_vars:
-        if not Metric.print_vars:
+        if not Metric.print_vars: 
             name = remove_vars(name)    
         if not Metric.print_mods:
             name = remove_mods(name)
@@ -291,7 +295,7 @@ class Metric():
         if other.e_type == self.e_type:
             new_type = self.e_type
         else:
-            new_type = ExperimentType.MIX
+            new_type = ExperimentType.UNDEF
         return Metric(new_val, new_name, new_type, self.flags)    
     
     def __add__(self, other):

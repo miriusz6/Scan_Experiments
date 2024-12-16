@@ -64,7 +64,7 @@ class ExperimentType(IntEnum):
     E_3_3_32_4 = auto()
     E_3_3_32_5 = auto()
 
-    MIX = auto()
+    UNDEF = auto()
 
     def __str__(self):
         return self.name

@@ -45,6 +45,8 @@ class ExperimentConfig():
         self.evaluation_interval = evaluation_interval
         self.k_fold = k_fold # (k, n) where k is the number of folds and n is the fold number
         self.detailed_logging = detailed_logging
+        if k_fold:
+            self.model_save_path = model_save_path+"k_fold/"
         
         
 
@@ -86,6 +88,7 @@ class E1_Config(ExperimentConfig):
                 learning_rate=7e-4,
                 batch_size=64,
                 epochs=25,
+                model_save_path="saved_data/models/E_1/",
                 )
     
 class E2_Config(ExperimentConfig):
@@ -95,7 +98,8 @@ class E2_Config(ExperimentConfig):
                 dropout=0.15,
                 learning_rate=2e-4,
                 batch_size=16,
-                epochs=30
+                epochs=30,
+                model_save_path="saved_data/models/E_2/",
                 )
 
 class E3_Config(ExperimentConfig):
@@ -105,5 +109,6 @@ class E3_Config(ExperimentConfig):
                 dropout=0.15,
                 learning_rate=2e-4,
                 batch_size=16,
-                epochs=20
+                epochs=20,
+                model_save_path="saved_data/models/E_3/",
                 )

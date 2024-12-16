@@ -1,7 +1,8 @@
 from __future__ import annotations
 from experiments.experiment_type import ExperimentType
 from experiments.metric import Metric, MetricTemplate, Flags, Flag
-from experiments.utils import merge_names
+from experiments.metric_utils import merge_names
+from experiments.metric_utils import flatten_dict
 import numpy as np
 import operator
 
@@ -28,7 +29,7 @@ class EvaluationResult:
     
     lookup = _mk_lookup()
 
-    def __init__(self, data: list[Metric]|dict, e_name:str = "Mixed" , e_type = ExperimentType.MIX):
+    def __init__(self, data: list[Metric]|dict, e_name:str = ExperimentType.UNDEF.name , e_type = ExperimentType.UNDEF):
         self.experiment_type = e_type
         self.experiment_name = e_name
         if isinstance(data, list):
@@ -59,40 +60,56 @@ class EvaluationResult:
             if m:
                 ret.append(m)
         return ret
-
-        
     
-    def _unpack_data(self,data):
-        from experiments.utils import switch_dict_lvls, flatten_dict
-        # D L M P
-        groups = Flags.All
-        curr_d_lvl = data
-        # P M D L
-        order = []
-        for _ in groups:
-            k = list(curr_d_lvl.keys())[0]
-            order.append(Flags.get_group(k))
-            curr_d_lvl = curr_d_lvl[k]
-        # 3 2 0 1
-        proper_order = [order.index(g) for g in groups]
-        
-        data = switch_dict_lvls(data, proper_order)
-        
-        data = flatten_dict(data)
+    def set_data(self, metrics : list[Metric]):
+        e_type = self.experiment_type
+        for m in metrics:
+            e_type = ExperimentType.UNDEF if e_type != m.e_type else e_type
+            indx = self._find_index(m.to_template())
+            self.data[indx] = m
+        self.experiment_type = e_type
+        self.experiment_name = ExperimentType.UNDEF.name
 
+    def rename(self, new_name:str):
+        self.experiment_name = new_name
+
+    def _unpack_data(self,data):
+        data = flatten_dict(data)
         ret = [0]*self.lookup.shape[1]
-        
-        
         for k,v in data.items():
             key_lst = list(k)
             m = Metric(v,self.experiment_name,self.experiment_type,[Flag(x) for x in key_lst])
             t = MetricTemplate(flags= [Flag(x) for x in key_lst])
             indx = self._find_index(t)[0]
             ret[indx] = m
-        
         return ret
         
+    
+    # def _unpack_data_old(self,data):
+    #     # D L M P
+    #     groups = Flags.All
+    #     curr_d_lvl = data
+    #     # P M D L
+    #     order = []
+    #     for _ in groups:
+    #         k = list(curr_d_lvl.keys())[0]
+    #         order.append(Flags.get_group(k))
+    #         curr_d_lvl = curr_d_lvl[k]
+    #     # 3 2 0 1
+    #     proper_order = [order.index(g) for g in groups]
+    #     data = switch_dict_lvls(data, proper_order)        
+    #     data = flatten_dict(data)
 
+    #     ret = [0]*self.lookup.shape[1]
+    #     for k,v in data.items():
+    #         key_lst = list(k)
+    #         m = Metric(v,self.experiment_name,self.experiment_type,[Flag(x) for x in key_lst])
+    #         t = MetricTemplate(flags= [Flag(x) for x in key_lst])
+    #         indx = self._find_index(t)[0]
+    #         ret[indx] = m
+        
+    #     return ret
+        
     def print(self, scalars_only = True):
         if scalars_only:
             lst = self.get_data(MetricTemplate(flags=[Flags.DistrFlags.Avrg]))
@@ -130,6 +147,9 @@ class EvaluationResult:
         e_type = ExperimentType( d["e_type"])
         return EvaluationResult(data, e_name, e_type)
     
+    def to_template(self):
+        return MetricTemplate(flags=[m.flags for m in self.data if isinstance(m, Metric)])
+
     def __str__(self):
         return f"Experiment: {self.experiment_name} Results, Type: {self.experiment_type.name}"
 
