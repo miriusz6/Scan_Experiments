@@ -274,7 +274,7 @@ def mk_bar_plot(ax:plt.axes,
     if add_avrg_line:
         buff = [ys[i] for i in range(len(ys)) if i not in to_del]
         avrg = np.mean(buff)
-        ax.hlines(avrg,xmin=x_min, xmax=x_max, colors = "red", alpha = 0.7)
+        ax.hlines(avrg,xmin=x_min, xmax=x_max, colors = "red", alpha = 0.7, label = "Avrg")
         ax.text(x_max, avrg, f"{avrg:.2f}", ha='center', va='bottom',fontdict = {'color':'red'})
     
     
@@ -310,7 +310,20 @@ def calc_h_lines(data):
     l = [1 ,2 ,3 ,4 ,5 ,6 ,7 ,8 ,9,10]
     l = np.array(l)
     if max(data) > 1:
-        tens = len(str(max(data)))-1
+        bfr_dot = str(max(data)).split(".")[0]
+        tens = len(bfr_dot)-1
+        l = l * (10**(tens)) 
+        # to int
+        l = [i//1 for i in l]
     else:
-        tens = -(len(str(max(data)))-2)
-    return l * (10**floor( log10(tens) ) )
+        aftr_dot = str(max(data)).split(".")[1]
+        zeros = 0
+        for c in aftr_dot:
+            if c == "0":
+                zeros += 1
+            else:
+                break
+        tens = zeros+1
+        l = l * (10**(-tens)) 
+        l = [round(i, tens) for i in l]
+    return l

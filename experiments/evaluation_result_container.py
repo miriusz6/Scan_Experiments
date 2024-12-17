@@ -4,6 +4,7 @@ from experiments.metric import MetricTemplate
 import re
 from collections import OrderedDict
 import json
+from experiments.experiment_type import ExperimentType
 
 class EvaluationResultContainer():
     def __init__(self, e_results:list[EvaluationResult|EvaluationResultContainer] = None):
@@ -63,8 +64,13 @@ class EvaluationResultContainer():
                 ret.append(self.results[i])
         return EvaluationResultContainer(ret)
     
-    def filter_by_exp_type(self, e_type):
-        return EvaluationResultContainer([r for r in self.results if r.experiment_type == e_type])
+    
+
+    
+    def filter_by_exp_type(self, e_types:ExperimentType|list[ExperimentType]):
+        if isinstance(e_types, ExperimentType):
+            e_types = [e_types]
+        return EvaluationResultContainer([r for r in self.results if r.experiment_type in e_types])
 
     
     
@@ -86,6 +92,15 @@ class EvaluationResultContainer():
     # def append(self, e:EvaluationResult):
     #     self.append_results(e)
     
+    def sort_by_exp_names(self):
+        self.results_map = OrderedDict(sorted(self.results_map.items(), key=lambda x: x[0]))
+        #self.results_map.items().sort(key=lambda x: x[0])
+        # self.result_names = list(self.results_map.keys())
+        # self.results = list(self.results_map.values())
+        
+    def sort_by_exp_types(self):
+        self.results_map = OrderedDict(sorted(self.results_map.items(), key=lambda x: x[1].experiment_type.value))
+        
 
 
     @classmethod
