@@ -2,19 +2,29 @@ from __future__ import annotations
 from experiments.evaluation_result import EvaluationResult
 from experiments.metric import MetricTemplate
 import re
-
+from collections import OrderedDict
+import json
 
 class EvaluationResultContainer():
     def __init__(self, e_results:list[EvaluationResult|EvaluationResultContainer] = None):
-        self.results_map = {}
-        self.results = []
-        self.result_names = []
+        self.results_map = OrderedDict()
+        # self.results = []
+        # self.result_names = []
         if e_results is not None:
             for e in e_results:
                 if isinstance(e, EvaluationResult):
                     self.append_results(e)
                 else:
                     self.merge_containers(e)
+    
+    
+    @property
+    def result_names(self):
+        return list(self.results_map.keys())
+    
+    @property
+    def results(self):
+        return list(self.results_map.values())
     
     def merge_containers(self, other:EvaluationResultContainer):
         for e in other.results:
@@ -29,8 +39,8 @@ class EvaluationResultContainer():
         e.experiment_name = n
 
         self.results_map[e.experiment_name] = e
-        self.results.append(e)
-        self.result_names.append(e.experiment_name)
+        # self.results = list(self.results_map.values())
+        # self.result_names = list(self.results_map.keys())
 
     def get_data(self,template: MetricTemplate):
         experiment_types = template.e_types
@@ -56,6 +66,27 @@ class EvaluationResultContainer():
     def filter_by_exp_type(self, e_type):
         return EvaluationResultContainer([r for r in self.results if r.experiment_type == e_type])
 
+    
+    
+    def rename_element(self, old_name:str, new_name:str):
+        if old_name in self.results_map and new_name not in self.results_map:
+            self.results_map[old_name].rename(new_name)
+            self.results_map[new_name] = self.results_map.pop(old_name)
+            # self.result_names = list(self.results_map.keys())
+            # self.results = list(self.results_map.values())
+    
+    
+    def pop(self,to_pop:int|str):
+        if isinstance(to_pop, int):
+            key = self.result_names[to_pop]
+        else:
+            key = to_pop
+        return self.results_map.pop(key)
+    
+    # def append(self, e:EvaluationResult):
+    #     self.append_results(e)
+    
+
 
     @classmethod
     def from_dict(cls, d:dict):
@@ -67,7 +98,17 @@ class EvaluationResultContainer():
         results = [EvaluationResult.to_dict(v) for v in container.results]
         return {"results": results}
 
-
+    @classmethod
+    def from_json(cls, path:str):
+        with open(path, "r") as f:
+            res_d = json.load(f)
+        return cls.from_dict(res_d)
+    
+    @classmethod
+    def to_json(cls, container:EvaluationResultContainer, path:str):
+        with open(path, "w") as f:
+            json.dump(cls.to_dict(container), f, indent=4)
+        
     def __str__(self):
         s = "Experiment Results Container:\n"
         for r in self.results:
