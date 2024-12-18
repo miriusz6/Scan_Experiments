@@ -57,7 +57,7 @@ class EvaluationResult:
         for i in indxs:
             m = self.data[i]
             # if is a metric
-            if m:
+            if isinstance(m, Metric):
                 ret.append(m)
         return ret
     
@@ -83,32 +83,7 @@ class EvaluationResult:
             indx = self._find_index(t)[0]
             ret[indx] = m
         return ret
-        
-    
-    # def _unpack_data_old(self,data):
-    #     # D L M P
-    #     groups = Flags.All
-    #     curr_d_lvl = data
-    #     # P M D L
-    #     order = []
-    #     for _ in groups:
-    #         k = list(curr_d_lvl.keys())[0]
-    #         order.append(Flags.get_group(k))
-    #         curr_d_lvl = curr_d_lvl[k]
-    #     # 3 2 0 1
-    #     proper_order = [order.index(g) for g in groups]
-    #     data = switch_dict_lvls(data, proper_order)        
-    #     data = flatten_dict(data)
-
-    #     ret = [0]*self.lookup.shape[1]
-    #     for k,v in data.items():
-    #         key_lst = list(k)
-    #         m = Metric(v,self.experiment_name,self.experiment_type,[Flag(x) for x in key_lst])
-    #         t = MetricTemplate(flags= [Flag(x) for x in key_lst])
-    #         indx = self._find_index(t)[0]
-    #         ret[indx] = m
-        
-    #     return ret
+     
         
     def print(self, scalars_only = True):
         if scalars_only:

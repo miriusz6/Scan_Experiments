@@ -29,8 +29,10 @@ class Experiment():
         self.e_type = experiment_type
         self.config = config
         self.name = self.e_type.name if self.config.experiment_name is None else self.config.experiment_name
+        if ("rep") not in self.name:
+            self.name = self.name + "_rep_1"
         self.device = config.device
-        
+        self.writer = None
         self.train_dataset = self._mk_train_dataset()
         self.test_dataset = None
         self.train_loader = None
@@ -41,12 +43,12 @@ class Experiment():
         self.current_fold = None
         self.folds = None
         self.model = None
+        self.overwrite = self.config.overwrite_if_saving
         
         self.use_TB = config.use_tensorboard
-        if self.use_TB:
-            self.tensorboard_path = self._mk_path(config.tensorboard_log_path,False)
-        else:
-            self.writer = None
+
+        self.epoch_checkpoint = 0
+       
 
     def _validate_path(self, path):
         path_alter = os.path.join(CURR_DIR, path)
@@ -54,7 +56,12 @@ class Experiment():
             return path
         elif os.path.exists(path_alter):
             return path_alter
-        raise FileNotFoundError(f"Path does not exist: {path}")
+        # create path if not exists
+        if not os.path.exists(path):
+            os.makedirs(path)
+            print("Path created: ", path)
+            return path
+        
     
     def _validate_file(self, path):
         path_alter = os.path.join(CURR_DIR, path)
@@ -68,18 +75,35 @@ class Experiment():
         path = self._validate_path(raw_p)
         full_path = os.path.join(path, self.name)+ext
         f_dir_exists = lambda p: os.path.isfile(p) or os.path.isdir(p)
+
         if  f_dir_exists(full_path) and not overwrite:
             # try path/name(1), path/name(2), ...
             alter_path = full_path
-            i = -1
+
+            reps_indx = full_path.find('rep_')
+            i = 0
             while f_dir_exists(alter_path):
                 i += 1
-                alter_path = os.path.join(path, f"{self.name}({i})"+ext)
+                # _rep is always added
+                if reps_indx != -1:
+                    curr_rep = full_path[reps_indx+4:]
+                    if ext != "":
+                        curr_rep = curr_rep.split('.')[0]
+                    curr_rep = int(curr_rep)
+                    alter_path = full_path[:reps_indx+4] + str(curr_rep+i) + ext
+                # fail safe in case name was modified after initialisation
+                else:
+                    alter_path = os.path.join(path, f"{self.name}({i})"+ext)
                 
             full_path = alter_path
-            self.name = f"{self.name}({i})"
+            new_name = full_path.split('/')[-1]
+            if ext != "":
+                new_name = new_name.split('.')[0]
+            
+            self.name = new_name
         if overwrite:
-            print("The following file will be overwritten:", full_path)
+            if f_dir_exists(full_path):
+                print("The following file will be overwritten:", full_path)
             if os.path.exists(full_path):
                 os.remove(full_path)
         return full_path
@@ -142,8 +166,9 @@ class Experiment():
         ).to(self.device)
         return model
 
-    def _load_weights(self):
-        p = self.config.model_weights_path
+    def _load_weights(self,p = ""):
+        if p == "":
+            p = self.config.model_weights_path
         p = self._validate_file(p)
         print("Loading model weights from: ", p)
         self.model.load_state_dict(torch.load(p))
@@ -155,18 +180,44 @@ class Experiment():
             self._train()
         else:
             self.folds = self.config.k_fold
-            for i in range(self.config.k_fold):
-                self.current_fold = i
+            # use tqdm
+            fold_bar = tqdm(range(self.folds), desc="FOLD")
+            for f_num in fold_bar:
+                self.current_fold = f_num
                 self.train_dataset = self._mk_train_dataset()
                 self._train()
 
     def _train(self):
+        r_indx = self.name.find("_rep")
+        org_name_base,org_rep_info = self.name[:r_indx], self.name[r_indx:]
+
+        fold_info = ""
+        tb_fold_info = ""
+        if self.use_k_fold:
+            fold_info = f"_fold_{self.current_fold+1}_of_{self.folds}"
+            tb_fold_info = f"/fold{self.current_fold+1}"
+        self.name = org_name_base + fold_info + org_rep_info
+
         if self.use_TB:
+            self._validate_path(self.config.tensorboard_log_path)
+            self.tensorboard_path = self._mk_path(self.config.tensorboard_log_path,self.overwrite)
             self.writer = SummaryWriter(self.tensorboard_path)
+        self._validate_path(self.config.results_dict_path)
+        self._validate_path(self.config.model_save_path)
+        
+
         self._prepate_data()
         self.model = self._mk_model()
         if self.config.model_weights_path is not None:
             self._load_weights()
+        if self.epoch_checkpoint != 0:
+            # f"[resume_{self.epoch_checkpoint}_epoch]"
+            n = org_name_base.split("{")[0] + org_name_base.split("}")[1]
+            p = self.config.model_save_path + n
+            p += fold_info + f"_epoch_{self.epoch_checkpoint }" + org_rep_info
+            p += ".weights"
+            self._load_weights(p)
+
         criterion = CrossEntropyLoss(ignore_index=self.train_dataset.vocab.pad_idx)
         optimizer = AdamW(
             self.model.parameters(),
@@ -182,18 +233,15 @@ class Experiment():
         step = 0
 
         eval_interval = self.config.evaluation_interval
+        model_sv_interval = self.config.model_save_interval
 
-        fold_info = ""
-        tb_fold_info = ""
-        if self.use_k_fold:
-            fold_info = f"_fold_{self.current_fold+1}/{self.folds}"
-            tb_fold_info = f"/fold{self.current_fold+1}"
+        
 
         if self.config.detailed_logging:
-            print("Training started for experiment: ", self.e_type.name, fold_info)
+            print("Training started for experiment: ", self.e_type.name)#, fold_info)
 
         # TRAINING LOOP
-        epoch_progress = tqdm(range(max_epoch), desc="EPOCH"+fold_info)
+        epoch_progress = tqdm(range(self.epoch_checkpoint, max_epoch), desc="EPOCH"+fold_info)
         for epoch in epoch_progress:
             total_loss = 0
             self.model.train()
@@ -220,11 +268,19 @@ class Experiment():
             if epoch % eval_interval == 0 or epoch == max_epoch:
                 self.model.eval()
                 result = evaluate_model_batchwise(self.model,self.test_dataset, self.test_loader, self.test_dataset.vocab, self.device)
-                result = EvaluationResult(result, self.name+fold_info+f"_epoch_{epoch}", self.e_type)
+                #result = EvaluationResult(result, self.name+fold_info+f"_epoch_{epoch}", self.e_type)
+                result = EvaluationResult(result, self.name+f"_epoch_{epoch}", self.e_type)
                 if self.config.detailed_logging or epoch == max_epoch:
                     result.print()
                 self.result_container.append_results(result)
             
+            if epoch % model_sv_interval == 0 or epoch == max_epoch:
+                buff = self.name
+                self.name = org_name_base + fold_info + f"_epoch_{epoch}" + org_rep_info
+                self.save_model()
+                self.name = buff
+
+
             if self.use_TB:
                 self.writer.add_scalar(tag = 'TrainLoss'+tb_fold_info,
                                     scalar_value = total_loss,
@@ -235,16 +291,18 @@ class Experiment():
         
         if self.config.detailed_logging:
             print("Training finished for experiment: ", self.e_type.name)
+
+        self.name = org_name_base + org_rep_info
             
-    def save_model(self, path = "", overwrite = False):
+    def save_model(self, path = ""):
+        overwrite = self.overwrite
         if path == "":
-            path = self._mk_path(self.config.model_path,overwrite,ext=".weights")
-        else:
-            path = self._mk_path(path, overwrite)
-        print("Model will be saved at: ", path)
+            path = self._mk_path(self.config.model_save_path,overwrite,ext=".weights")
+        print("Model saved at: ", path)
         torch.save(self.model.state_dict(),path)
     
-    def save_results(self, path = "", overwrite = False):
+    def save_results(self, path = ""):
+        overwrite = self.overwrite
         if path == "":
             path = self._mk_path(self.config.results_dict_path,overwrite,ext=".json")
         else:
@@ -255,16 +313,23 @@ class Experiment():
         with open(path, "w") as f:
             json.dump(d,f,indent=4)
             
-
-    def run(self):
+    def run(self, from_epoch = 0):
         print("-"*50)
-        if self.use_TB and self.config.detailed_logging:
-            print("Tensorboard logs will be saved at: ", self.tensorboard_path)
-        if self.config.train_model:
-            if self.use_k_fold:
-                self._k_fold_train()
-            else:
-                self._train()
+        self.epoch_checkpoint = from_epoch
+        if self.epoch_checkpoint != 0:
+            r_indx = self.name.find("_rep")
+            base,org_rep_info = self.name[:r_indx], self.name[r_indx:]
+            self.name = base + '{' + f"resume_{self.epoch_checkpoint}_epoch" + '}'+ org_rep_info
+        if not self.config.train_model:
+            print("Enable model training. This is a debug mode")
+        if self.use_k_fold:
+            self._k_fold_train()
+        else:
+            self._train()
+            print("Training finished for experiment: ", self.e_type.name)
+            if self.use_TB and self.config.detailed_logging:
+                print("Tensorboard logs saved at: ", self.tensorboard_path)
+        
         return self.result_container
         
 

@@ -257,16 +257,20 @@ def mk_bar_plot(ax:plt.axes,
     x_max = max(xs)+1
     x_min = min(xs)-1
     
-    ax.bar(xs, ys, **bar_kwrgs)
+    bar_act = ax.bar(xs, ys, **bar_kwrgs)
+    hlins_act = None
+    coors_txt_act = None
+    avrg_line_act = None
+
     if h_lines:
         h_ls = calc_h_lines(ys)
-        ax.hlines(h_ls,xmin=x_min, xmax=x_max, colors = "grey", alpha = 0.4)
+        hlins_act = ax.hlines(h_ls,xmin=x_min, xmax=x_max, colors = "grey", alpha = 0.4)
         ax.set_yticks(h_ls)
         ax.set_yticklabels(h_ls)
     if coords_txt:
         for i in range(len(ys)):
             if ys[i] > 0:
-                ax.text(xs[i], ys[i], f"{ys[i]:.2f}", ha='center', va='bottom')
+                coors_txt_act = ax.text(xs[i], ys[i], f"{ys[i]:.2f}", ha='center', va='bottom')
     ax.set_xlim(x_min,x_max)
     ax.set_xticks(xtics)
     ax.set_xticklabels(x_lables)
@@ -274,9 +278,10 @@ def mk_bar_plot(ax:plt.axes,
     if add_avrg_line:
         buff = [ys[i] for i in range(len(ys)) if i not in to_del]
         avrg = np.mean(buff)
-        ax.hlines(avrg,xmin=x_min, xmax=x_max, colors = "red", alpha = 0.7, label = "Avrg")
+        avrg_line_act = ax.hlines(avrg,xmin=x_min, xmax=x_max, colors = "red", alpha = 0.7, label = "Avrg")
         ax.text(x_max, avrg, f"{avrg:.2f}", ha='center', va='bottom',fontdict = {'color':'red'})
     
+    return (bar_act, hlins_act, coors_txt_act, avrg_line_act)
     
 def mk_bar_plt_omit_empty(ax:plt.axes, 
                 data_metric:Metric,
@@ -294,17 +299,19 @@ def mk_bar_plt_omit_empty(ax:plt.axes,
     v_arr = data_metric.val
     v_arr = v_arr[non_zero_indx]
     m = Metric(v_arr,'',None,data_metric.flags)
-    mk_bar_plot(ax, m,
-                x_lbls=non_zero_indx,
-                coords_txt=coords_txt,
-                h_lines=h_lines,
-                bar_kwrgs=bar_kwrgs,
-                cut_trailing_zeros=cut_trailing_zeros,
-                omit_zero_lbls=omit_zero_lbls,
-                add_avrg_line=add_avrg_line
-                )   
+    actors = mk_bar_plot(ax, m,
+                        x_lbls=non_zero_indx,
+                        coords_txt=coords_txt,
+                        h_lines=h_lines,
+                        bar_kwrgs=bar_kwrgs,
+                        cut_trailing_zeros=cut_trailing_zeros,
+                        omit_zero_lbls=omit_zero_lbls,
+                        add_avrg_line=add_avrg_line
+                        )   
+    return actors
     
-    
+
+
     
 def calc_h_lines(data):
     l = [1 ,2 ,3 ,4 ,5 ,6 ,7 ,8 ,9,10]

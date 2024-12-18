@@ -129,7 +129,6 @@ Flags = _Flags()
 
 
 
-
 class MetricTemplate():
     def __init__(self,
                  e_types: list[ExperimentType] = None,
@@ -157,11 +156,6 @@ class Metric():
     print_mods = True
     print_vars = True
     def __init__(self, val, e_name:str, e_type: ExperimentType, flags: list[Flag]):
-        # self._val = None
-        # self._flags = None
-        # self._e_type = None
-        # self._e_name = None
-        
         self._val = val
         self.e_type = e_type
         self.e_name = e_name
@@ -318,15 +312,5 @@ class Metric():
     
     def __pow__(self, other):
         return self._smth(other, operator.pow, "POW")
-    
-# # class ScanMetric(Metric):
-# #     def __init__(self, val, e_name:str, e_type: ExperimentType, flags: list[Flag]):
 
-# #         f_groups = Flags.group_flags(flags)
-# #         # Check if only one flag of each group is present
-# #         single_flags = [len(vals) == 1 for vals in f_groups.values()]
-# #         if sum(single_flags) != len(f_groups.values()):
-# #             raise ValueError("Only one flag of each group is _allowed")
-
-# #         super().__init__(val, e_name, e_type, flags)
         

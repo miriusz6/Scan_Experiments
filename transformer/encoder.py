@@ -36,7 +36,7 @@ class Encoder(nn.Module):
         )
         self.dropout = nn.Dropout(dropout)
         self.trans_layers = nn.ModuleList(
-            [TransformerBlock(emb_dim, num_heads, dropout, forward_dim)] * num_layers
+            [TransformerBlock(emb_dim, num_heads, dropout, forward_dim) for _ in range(num_layers)]
         )
 
     def forward(self, x, mask):

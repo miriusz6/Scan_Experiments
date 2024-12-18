@@ -144,11 +144,11 @@ from experiments.experiment_config import E1_Config, E2_Config, E3_Config
 
 def get_config(e:ExperimentType):
     if e.name.startswith("E_1"):
-        return E1_Config()
+        return E1_Config
     elif e.name.startswith("E_2"):
-        return E2_Config()
+        return E2_Config
     elif e.name.startswith("E_3"):
-        return E3_Config()
+        return E3_Config
     else:
         raise ValueError("Invalid experiment type")
 

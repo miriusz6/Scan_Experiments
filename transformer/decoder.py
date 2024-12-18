@@ -30,7 +30,7 @@ class Decoder(nn.Module):
         self.pos_emb = nn.Embedding(max_len, emb_dim)
         self.dropout = nn.Dropout(dropout)
         self.layers = nn.ModuleList(
-            [DecoderBlock(emb_dim, num_heads, forward_dim, dropout)] * num_layers
+            [DecoderBlock(emb_dim, num_heads, forward_dim, dropout) for _ in range(num_layers)]
         )
 
         self.fc1 = nn.Linear(emb_dim, vocab_size)

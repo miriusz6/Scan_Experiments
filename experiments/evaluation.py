@@ -1,7 +1,5 @@
 import torch
-from experiments.metric import Flags, Flag
-from copy import deepcopy
-from collections import OrderedDict
+from experiments.metric import Flags
 
 def predict_batch(model, src_sequence, vocab, max_len=128, device="cpu"):
     """
@@ -131,76 +129,22 @@ def predict_batch_oracle(model, src_sequence, vocab, seq_lenghts, device="cpu"):
                 break
     return tgt
 
-def _dummy_eval_result():
-    inp_len_max = 10
-    tgt_len_max = 10
-    inp_seq_span = torch.zeros(inp_len_max+1, device="cpu", dtype=torch.long)
-    tgt_seq_span = torch.zeros(tgt_len_max+1, device="cpu", dtype=torch.long)
-
-    template = OrderedDict({
-        Flags.DistrFlags.Avrg:
-            OrderedDict({
-                Flags.LevelFlags.TL: 0,
-                Flags.LevelFlags.SL: 0,
-            }),
-        Flags.DistrFlags.InLen:
-            OrderedDict({
-                Flags.LevelFlags.TL: inp_seq_span.clone(),
-                Flags.LevelFlags.SL: inp_seq_span.clone(),
-            }),
-        Flags.DistrFlags.OutLen:
-            OrderedDict({
-                Flags.LevelFlags.TL: tgt_seq_span.clone(),
-                Flags.LevelFlags.SL: tgt_seq_span.clone(),
-            })
-    })
-    correct = deepcopy(template)
-    total = deepcopy(template)
-    err_rate = deepcopy(template)
-    accuracy = deepcopy(template)
-
-    result = OrderedDict({
-        Flags.MetricFlags.CORRECT : detach_result_map(correct),
-        Flags.MetricFlags.TOTAL : detach_result_map(total),
-        Flags.MetricFlags.ACC : detach_result_map(accuracy),
-        Flags.MetricFlags.ERR : detach_result_map(err_rate)
-    })
-
-    ret = OrderedDict()
-    ret[Flags.PredictionFlags.ORACLE] = deepcopy(result)
-    ret[Flags.PredictionFlags.NO_ORACLE] = result    
-    ret = {Flags.PredictionFlags.ORACLE: deepcopy(result),
-                Flags.PredictionFlags.NO_ORACLE: result}
-    
-    
-    return ret
-    
+  
 def _evaluate_model_batchwise(model, test_data, test_loader, vocab, device="cpu", length_oracle=False):
     inp_len_max = test_data.command_length_span[1]
     tgt_len_max = test_data.action_sequence_span[1]
     inp_seq_span = torch.zeros(inp_len_max+1, device=device, dtype=torch.long)
     tgt_seq_span = torch.zeros(tgt_len_max+1, device=device, dtype=torch.long)
-
-    template = {
-        Flags.DistrFlags.InLen:
-            {
-                Flags.LevelFlags.TL: inp_seq_span.clone(),
-                Flags.LevelFlags.SL: inp_seq_span.clone(),
-            },
-        Flags.DistrFlags.OutLen:
-            {
-                Flags.LevelFlags.TL: tgt_seq_span.clone(),
-                Flags.LevelFlags.SL: tgt_seq_span.clone(),
-            },
-        Flags.DistrFlags.Sum:
-            {
-                Flags.LevelFlags.TL: 0,
-                Flags.LevelFlags.SL: 0
-            }
-    }
-    correct = deepcopy(template)
-    total = deepcopy(template)
-
+    zero_item = torch.tensor(0, device=device)
+    # TO: Total, CR: Correct
+    # TL: Token Level, SL: Sequence Level
+    # IL: InLen, OL: OutLen, SU: Sum
+    TO_TL_IL, CR_TL_IL = inp_seq_span.clone(), inp_seq_span.clone()
+    TO_SL_IL, CR_SL_IL = inp_seq_span.clone(), inp_seq_span.clone()
+    TO_TL_OL, CR_TL_OL = tgt_seq_span.clone(), tgt_seq_span.clone()
+    TO_SL_OL, CR_SL_OL = tgt_seq_span.clone(), tgt_seq_span.clone()
+    TO_TL_SU, CR_TL_SU = zero_item.clone(), zero_item.clone()
+    TO_SL_SU, CR_SL_SU = zero_item.clone(), zero_item.clone()
 
     for src, _, tgt in test_loader:
         src = src.to(device)
@@ -238,16 +182,14 @@ def _evaluate_model_batchwise(model, test_data, test_loader, vocab, device="cpu"
         # sum up seq differences, if no differences then correct
         correct_seqs = torch.where(seq_diff == 0, 1, 0)
 
-        correct[Flag.Sum][Flag.SL] += correct_seqs.sum()
-        total[Flag.Sum][Flag.SL] += tgt.size(0)
-
+        CR_SL_SU += correct_seqs.sum()
+        TO_SL_SU += tgt.size(0)
         
-        correct[Flag.InLen][Flag.SL].scatter_add_(0, src_lens ,  correct_seqs)
-        total[Flag.InLen][Flag.SL].scatter_add_(0, src_lens ,  torch.ones_like(src_lens))#torch.scatter_add(total[MetricFlag.SLIL],0, src_lens ,  torch.ones_like(src_lens))
+        CR_SL_IL.scatter_add_(0, src_lens, correct_seqs)
+        TO_SL_IL.scatter_add_(0, src_lens, torch.ones_like(src_lens))
 
-        correct[Flag.OutLen][Flag.SL].scatter_add_(0, tgt_lens ,  correct_seqs)
-        total[Flag.OutLen][Flag.SL].scatter_add_(0, tgt_lens ,  torch.ones_like(tgt_lens))
-
+        CR_SL_OL.scatter_add_(0, tgt_lens, correct_seqs)
+        TO_SL_OL.scatter_add_(0, tgt_lens, torch.ones_like(tgt_lens))
 
         # token level accuracy: matching tokens/total tokens
         # disregarding special tokens
@@ -257,42 +199,93 @@ def _evaluate_model_batchwise(model, test_data, test_loader, vocab, device="cpu"
         both_tokens = torch.where(is_special_F(tgt) & is_special_F(predictions), False, True)
         # correctly predicted not special tokens
         correctly_predicted = torch.where(both_tokens & (tgt == predictions), True, False)
-        correct[Flag.Sum][Flag.TL] += correctly_predicted.sum()
-        total[Flag.Sum][Flag.TL] += tokens_to_predict
+        CR_TL_SU += correctly_predicted.sum()
+        TO_TL_SU += tokens_to_predict
 
-        correct[Flag.InLen][Flag.TL].scatter_add_(0, src_lens ,  correctly_predicted.sum(1))
-        total[Flag.InLen][Flag.TL].scatter_add_(0, src_lens ,  tgt_lens)
+        CR_TL_IL.scatter_add_(0, src_lens ,  correctly_predicted.sum(1))
+        TO_TL_IL.scatter_add_(0, src_lens ,  tgt_lens)
 
-        correct[Flag.OutLen][Flag.TL].scatter_add_(0, tgt_lens ,  correctly_predicted.sum(1))
-        total[Flag.OutLen][Flag.TL].scatter_add_(0, tgt_lens ,  tgt_lens)
+        CR_TL_OL.scatter_add_(0, tgt_lens ,  correctly_predicted.sum(1))
+        TO_TL_OL.scatter_add_(0, tgt_lens ,  tgt_lens)
 
-    template = {
-        Flags.DistrFlags.Avrg:
-            {
-                Flags.LevelFlags.TL: 0,
-                Flags.LevelFlags.SL: 0,
-            },
-        Flags.DistrFlags.InLen:
-            {
-                Flags.LevelFlags.TL: inp_seq_span.clone(),
-                Flags.LevelFlags.SL: inp_seq_span.clone(),
-            },
-        Flags.DistrFlags.OutLen:
-            {
-                Flags.LevelFlags.TL: tgt_seq_span.clone(),
-                Flags.LevelFlags.SL: tgt_seq_span.clone(),
-            },
+    # Create result dictionary
+    err_rate = {
+    Flags.DistrFlags.InLen:
+        {
+            Flags.LevelFlags.TL: calc_error_rate_scalar(CR_TL_IL, TO_TL_IL).cpu().numpy(),
+            Flags.LevelFlags.SL: calc_error_rate_scalar(CR_SL_IL, TO_SL_IL).cpu().numpy(),
+        },
+    Flags.DistrFlags.OutLen:
+        {
+            Flags.LevelFlags.TL: calc_error_rate_tensor(CR_TL_OL, TO_TL_OL).cpu().numpy(),
+            Flags.LevelFlags.SL: calc_error_rate_tensor(CR_SL_OL, TO_SL_OL).cpu().numpy(),
+        },
+    Flags.DistrFlags.Avrg:
+        {
+            Flags.LevelFlags.TL: calc_error_rate_scalar(CR_TL_SU, TO_TL_SU).item(),
+            Flags.LevelFlags.SL: calc_error_rate_scalar(CR_SL_SU, TO_SL_SU).item(),
+        }
     }
 
-    
-    err_rate = calc_error_rate(correct, total,deepcopy(template))
-    accuracy = calc_acc(correct, total,deepcopy(template))
+    accuracy = {
+    Flags.DistrFlags.InLen:
+        {
+            Flags.LevelFlags.TL: calc_acc_scalar(CR_TL_IL, TO_TL_IL).cpu().numpy(),
+            Flags.LevelFlags.SL: calc_acc_scalar(CR_SL_IL, TO_SL_IL).cpu().numpy(),
+        },
+    Flags.DistrFlags.OutLen:
+        {
+            Flags.LevelFlags.TL: calc_acc_tensor(CR_TL_OL, TO_TL_OL).cpu().numpy(),
+            Flags.LevelFlags.SL: calc_acc_tensor(CR_SL_OL, TO_SL_OL).cpu().numpy(),
+        },
+    Flags.DistrFlags.Avrg:
+        {
+            Flags.LevelFlags.TL: calc_acc_scalar(CR_TL_SU, TO_TL_SU).item(),
+            Flags.LevelFlags.SL: calc_acc_scalar(CR_SL_SU, TO_SL_SU).item(),
+        }
+    }
+
+    correct = {
+    Flags.DistrFlags.InLen:
+        {
+            Flags.LevelFlags.TL: CR_TL_IL.cpu().numpy(),
+            Flags.LevelFlags.SL: CR_SL_IL.cpu().numpy(),
+        },
+    Flags.DistrFlags.OutLen:
+        {
+            Flags.LevelFlags.TL: CR_TL_OL.cpu().numpy(),
+            Flags.LevelFlags.SL: CR_SL_OL.cpu().numpy(),
+        },
+    Flags.DistrFlags.Sum:
+        {
+            Flags.LevelFlags.TL: CR_TL_SU.item(),
+            Flags.LevelFlags.SL: CR_SL_SU.item(),
+        }
+    }
+
+    total = {
+    Flags.DistrFlags.InLen:
+        {
+            Flags.LevelFlags.TL: TO_TL_IL.cpu().numpy(),
+            Flags.LevelFlags.SL: TO_SL_IL.cpu().numpy(),
+        },
+    Flags.DistrFlags.OutLen:
+        {
+            Flags.LevelFlags.TL: TO_TL_OL.cpu().numpy(),
+            Flags.LevelFlags.SL: TO_SL_OL.cpu().numpy(),
+        },
+    Flags.DistrFlags.Sum:
+        {
+            Flags.LevelFlags.TL: TO_TL_SU.item(),
+            Flags.LevelFlags.SL: TO_SL_SU.item(),
+        }
+    }
 
     result = {
-        Flags.MetricFlags.CORRECT : detach_result_map(correct),
-        Flags.MetricFlags.TOTAL : detach_result_map(total),
-        Flags.MetricFlags.ACC : detach_result_map(accuracy),
-        Flags.MetricFlags.ERR : detach_result_map(err_rate)
+        Flags.MetricFlags.CORRECT : correct,
+        Flags.MetricFlags.TOTAL : total,
+        Flags.MetricFlags.ACC : accuracy,
+        Flags.MetricFlags.ERR : err_rate,
     }
     return result
 
@@ -317,55 +310,21 @@ def evaluate_model_batchwise(model, test_data, test_loader, vocab, device="cpu")
     
     return result
 
-def calc_error_rate(correct, total, template):
-    err_rate = template
-    # total - correct / total
-    err_rate[Flag.Avrg][Flag.TL] = ((total[Flag.Sum][Flag.TL]- correct[Flag.Sum][Flag.TL])/ total[Flag.Sum][Flag.TL])
-    err_rate[Flag.Avrg][Flag.SL] = ((total[Flag.Sum][Flag.SL]- correct[Flag.Sum][Flag.SL]) / total[Flag.Sum][Flag.SL])
-    err_rate[Flag.InLen][Flag.TL] = torch.div((total[Flag.InLen][Flag.TL] - correct[Flag.InLen][Flag.TL]), total[Flag.InLen][Flag.TL])
-    err_rate[Flag.InLen][Flag.SL] = torch.div((total[Flag.InLen][Flag.SL] - correct[Flag.InLen][Flag.SL]), total[Flag.InLen][Flag.SL])
-    err_rate[Flag.OutLen][Flag.TL] = torch.div((total[Flag.OutLen][Flag.TL] - correct[Flag.OutLen][Flag.TL]), total[Flag.OutLen][Flag.TL])
-    err_rate[Flag.OutLen][Flag.SL] = torch.div((total[Flag.Sum][Flag.SL] - correct[Flag.OutLen][Flag.SL]), total[Flag.Sum][Flag.SL])
+def calc_error_rate_scalar(correct, total):
+    err_rate = (total - correct) / total
     return err_rate
 
-def calc_acc(correct, total, template):
-    acc = template
-    # correct / total
-    acc[Flag.Avrg][Flag.TL] = (correct[Flag.Sum][Flag.TL]/ total[Flag.Sum][Flag.TL])
-    acc[Flag.Avrg][Flag.SL] = (correct[Flag.Sum][Flag.SL] / total[Flag.Sum][Flag.SL])
-    acc[Flag.InLen][Flag.TL] = torch.div(correct[Flag.InLen][Flag.TL], total[Flag.InLen][Flag.TL])
-    acc[Flag.InLen][Flag.SL] = torch.div(correct[Flag.InLen][Flag.SL], total[Flag.InLen][Flag.SL])
-    acc[Flag.OutLen][Flag.TL] = torch.div(correct[Flag.OutLen][Flag.TL], total[Flag.OutLen][Flag.TL])
-    acc[Flag.OutLen][Flag.SL] = torch.div(correct[Flag.OutLen][Flag.SL], total[Flag.Sum][Flag.SL])
+def calc_error_rate_tensor(correct, total):
+    err_rate = remove_nan(torch.div((total - correct), total))
+    return err_rate
+
+def calc_acc_scalar(correct, total):
+    acc = correct / total
     return acc
 
-def detach_result_map(m):
-    try:
-        m[Flag.Avrg][Flag.TL] = m[Flag.Avrg][Flag.TL].item()
-    except:
-        pass
-    try:
-        m[Flag.Avrg][Flag.SL] = m[Flag.Avrg][Flag.SL].item()
-    except:
-        pass
-    try:
-        m[Flag.Sum][Flag.SL] = m[Flag.Sum][Flag.SL].item()
-    except:
-        pass
-    try:
-        m[Flag.Sum][Flag.TL] = m[Flag.Sum][Flag.TL].item()
-    except:
-        pass
-
-    # if isinstance(m[Flag.Avrg][Flag.TL], torch.Tensor):
-    #     m[Flag.Avrg][Flag.TL] = m[Flag.Avrg][Flag.TL].item()
-    # if isinstance(m[Flag.Avrg][Flag.SL], torch.Tensor):
-    #     m[Flag.Avrg][Flag.SL] = m[Flag.Avrg][Flag.SL].item()
-    m[Flag.InLen][Flag.TL] = remove_nan(m[Flag.InLen][Flag.TL]).cpu().numpy()
-    m[Flag.InLen][Flag.SL] = remove_nan(m[Flag.InLen][Flag.SL]).cpu().numpy()
-    m[Flag.OutLen][Flag.TL] = remove_nan(m[Flag.OutLen][Flag.TL]).cpu().numpy()
-    m[Flag.OutLen][Flag.SL] = remove_nan(m[Flag.OutLen][Flag.SL]).cpu().numpy()
-    return m
+def calc_acc_tensor(correct, total):
+    acc = remove_nan(torch.div(correct, total))
+    return acc
 
 def remove_nan(t):
     t = torch.where(torch.isnan(t), 0, t)
