@@ -5,7 +5,7 @@ from experiments.metric_utils import merge_names
 from experiments.metric_utils import flatten_dict
 import numpy as np
 import operator
-
+from torch.nn.utils import clip_grad_norm_
 
 class EvaluationResult:
     @staticmethod
@@ -87,7 +87,7 @@ class EvaluationResult:
         
     def print(self, scalars_only = True):
         if scalars_only:
-            lst = self.get_data(MetricTemplate(flags=[Flags.DistrFlags.Avrg]))
+            lst = self.get_data(MetricTemplate(flags=[Flags.DistrFlags.Avrg, Flags.MetricFlags.ACC]))
         else:
             lst = self.data
         print(self.__str__())
@@ -137,6 +137,15 @@ class EvaluationResult:
     def __sub__(self, other):
         return self._update_info(other, operator.sub)
     
+    def __rsub__(self, other):
+        return self._update_info(other, operator.sub)
+    
+    def __radd__(self, other):
+        return self._update_info(other, operator.add)
+    
+    
+
+    
     def __mul__(self, other):
         return self._update_info(other, operator.mul)
     
@@ -151,3 +160,28 @@ class EvaluationResult:
     
     def __pow__(self, other):
         return self._update_info(other, operator.pow)
+    
+    def __and__(self, other):
+        return self._update_info(other, operator.and_)
+    
+    def __or__(self, other):
+        return self._update_info(other, operator.or_)
+    
+    def __xor__(self, other):
+        return self._update_info(other, operator.xor)
+    
+    def __lshift__(self, other):
+        return self._update_info(other, operator.lshift)
+    
+    def __rshift__(self, other):
+        return self._update_info(other, operator.rshift)
+    
+    def __neg__(self):
+        return EvaluationResult([-x for x in self.data], self.experiment_name, self.experiment_type)
+    
+    def __pos__(self):
+        return EvaluationResult([+x for x in self.data], self.experiment_name, self.experiment_type)
+    
+    def __abs__(self):
+        return EvaluationResult([abs(x) for x in self.data], self.experiment_name, self.experiment_type)
+    

@@ -11,6 +11,7 @@ class ExperimentConfig():
                  grad_clip:int = 1,
                  batch_size_eval:int = 500,
                  epochs:int = 40,
+                 max_steps:int = None,
                  evaluation_interval:int = -1,
                  model_save_interval:int = -1,
                  device:str = "cuda",
@@ -36,6 +37,7 @@ class ExperimentConfig():
         self.grad_clip = grad_clip
         self.optimizer = optimizer
         self.epochs = epochs
+        self.max_steps = max_steps
         self.model_save_path = model_save_path
         self.tensorboard_log_path = tensorboard_log_path
         self.results_dict_path = results_dict_path
@@ -77,6 +79,7 @@ class ExperimentConfig():
         s += "grad_clip: " + str(self.grad_clip) + "\n"
         s += "optimizer: " + str(self.optimizer) + "\n"
         s += "epochs: " + str(self.epochs) + "\n"
+        s += "max_steps: " + str(self.max_steps) + "\n"
         s+= "--------PATHS---------\n"
         s += "model_save_path: " + str(self.model_save_path) + "\n"
         s += "tensorboard_log_path: " + str(self.tensorboard_log_path) + "\n"

@@ -221,12 +221,16 @@ class Metric():
 
     def __str__(self):
         name = self.e_name
-        #if cls.print_mods and cls.print_vars:
+        valS = str(self.val)
+        if isinstance(self.val, np.ndarray):
+            valS = '\n'
+            for i,v in  enumerate(self.val):
+                valS += f"{i}: {v}\n"
         if not Metric.print_vars: 
             name = remove_vars(name)    
         if not Metric.print_mods:
             name = remove_mods(name)
-        return f"{name} {self.e_type.name} {self.flagsS} : {self.val}"
+        return f"{name} {self.e_type.name} {self.flagsS} : {valS}"
 
 
     

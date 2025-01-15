@@ -1,30 +1,8 @@
 import matplotlib.pyplot as plt
 import numpy as np
-import re
-from experiments.evaluation_result import EvaluationResult
 from experiments.evaluation_result_container import EvaluationResultContainer
-from experiments.metric import MetricTemplate, Flags
+from experiments.metric import MetricTemplate, Flags, _MetricFlags
 from experiments.evaluation_statistics import  aggregate_by_subname
-from experiments.evaluation_statistics import aggregate_by_subname
-from math import log10, floor
-
-# def prepare_scalars_for_plot(
-#                       results:EvaluationResultContainer|EvaluationResult, 
-#                       template:MetricTemplate, 
-#                       xs = None,
-#                       x_lables = None,
-#                       ):
-#     data = results.get_data(template)
-#     if not x_lables and not x_lbls_re_patt:
-#         x_lables = np.arange(len(data))
-#     elif x_lbls_re_patt:
-#         x_lables = [re.search(x_lbls_re_patt, m.name).group(0) for m in data]
-#     if not xs :
-#         xs = np.arange(len(data))
-#     ys = [m.val for m in data]
-#     xtics = np.arange(len(data))
-#     return xs, ys, x_lables, xtics
-
 from experiments.metric import Metric
 
 def prepare_for_plot(
@@ -88,11 +66,6 @@ def prepare_for_plot(
                 
     
     return xs, ys, x_lables, xtics
-
-
-
-
-
 
 def plot_k_fold_reps(ax,
                     rep1:EvaluationResultContainer,
@@ -228,8 +201,7 @@ def mk_3fold_3reps_fig(f3_r1, f3_r2, f3_r3, epoch_range:tuple[int,int,int]):
     return fig, axs
 
 
-
-def mk_bar_plot(ax:plt.axes, 
+def _mk_bar_plot(ax:plt.axes, 
                 data: list[Metric]|Metric,
                 x_lbls= None,
                 coords_txt = True,
@@ -283,24 +255,32 @@ def mk_bar_plot(ax:plt.axes,
     
     return (bar_act, hlins_act, coors_txt_act, avrg_line_act)
     
-def mk_bar_plt_omit_empty(ax:plt.axes, 
+
+def mk_bar_plt(ax:plt.axes, 
                 data_metric:Metric,
-                total_metric: Metric,
-                coords_txt = True,
-                h_lines = True,
-                cut_trailing_zeros = True,
+                x_lbls = None,
+                omit_empty = False,
+                total_metric: Metric = None, # must if omit_empty
+                coords_txt = False,
+                h_lines = False,
+                cut_trailing_zeros = False,
                 omit_zero_lbls = False,
-                add_avrg_line = True,
+                add_avrg_line = False,
                 bar_kwrgs = {}
                 ):
+    if omit_empty:
+        total_arr = total_metric.val
+        non_zero_indx = [i for i,v in enumerate(total_arr) if v > 0]
+        m = data_metric[0]
+        v_arr = m.val
+        v_arr = v_arr[non_zero_indx]
+        m = Metric(v_arr,'',None,m.flags)
+        data_metric = m
+        x_lbls=non_zero_indx
     
-    total_arr = total_metric.val
-    non_zero_indx = [i for i,v in enumerate(total_arr) if v > 0]
-    v_arr = data_metric.val
-    v_arr = v_arr[non_zero_indx]
-    m = Metric(v_arr,'',None,data_metric.flags)
-    actors = mk_bar_plot(ax, m,
-                        x_lbls=non_zero_indx,
+    actors = _mk_bar_plot(ax, 
+                        data=data_metric,
+                        x_lbls=x_lbls,
                         coords_txt=coords_txt,
                         h_lines=h_lines,
                         bar_kwrgs=bar_kwrgs,
@@ -311,8 +291,6 @@ def mk_bar_plt_omit_empty(ax:plt.axes,
     return actors
     
 
-
-    
 def calc_h_lines(data):
     l = [1 ,2 ,3 ,4 ,5 ,6 ,7 ,8 ,9,10]
     l = np.array(l)
@@ -334,3 +312,278 @@ def calc_h_lines(data):
         l = l * (10**(-tens)) 
         l = [round(i, tens) for i in l]
     return l
+
+def plot_multi_step(
+            ax:plt.axes, 
+            data_container:EvaluationResultContainer,
+            metric_temp : MetricTemplate,
+            steps: list[str],
+            colors: list[str]|None = None,
+            x_lbls = None,
+            omit_empty = False,
+            coords_txt = False,
+            h_lines = False,
+            cut_trailing_zeros = False,
+            omit_zero_lbls = False,
+            add_avrg_line = False,
+            ):
+    
+    total_metric = None
+    if omit_empty:
+        flgs = Flags.group_flags(metric_temp.flags)
+        flgs[Flags.MetricFlags] = [Flags.MetricFlags.TOTAL]
+        flgs = list(flgs.values())
+        flgs = [f[0] for f in flgs]
+        total_metric = data_container.get_data(MetricTemplate(flags=flgs))[0]
+
+    if colors is None:
+        colors = [None]*len(steps)
+    from experiments.evaluation_statistics import aggregate_by_exp_type
+    for step,color in zip(steps,colors):
+        step_data = data_container.filter_by_exp_name(r'.+'+str(step))
+        step_data = aggregate_by_exp_type(step_data)
+        step_metrics:list[Metric] = step_data.get_data(metric_temp)
+
+        
+        alpha = 0.5
+
+        bar_kwrgs={
+                "label": str(step),
+                "alpha": alpha,
+                "color": color
+                }
+        if step == steps[0]:
+            # highest epoch
+            bar_kwrgs['alpha'] = alpha
+            bar_kwrgs['color'] = color
+            mk_bar_plt(ax,
+                    data_metric=step_metrics,
+                    x_lbls=x_lbls,
+                    cut_trailing_zeros=cut_trailing_zeros,
+                    omit_zero_lbls=omit_zero_lbls,
+                    omit_empty=omit_empty,
+                    total_metric=total_metric,
+                    coords_txt=coords_txt,
+                    h_lines=h_lines,
+                    add_avrg_line=add_avrg_line,
+                    bar_kwrgs= bar_kwrgs
+                    )
+        else:
+            bar_kwrgs['alpha'] = alpha
+            bar_kwrgs['color'] = color
+            mk_bar_plt(ax,
+                    data_metric=step_metrics,
+                    x_lbls=x_lbls,
+                    cut_trailing_zeros=cut_trailing_zeros,
+                    omit_zero_lbls=omit_zero_lbls,
+                    omit_empty=omit_empty,
+                    total_metric=total_metric,
+                    bar_kwrgs= bar_kwrgs,
+                    )
+            
+
+def mk_e1_fig(res_path:str):
+    E1 = EvaluationResultContainer.from_json(res_path)
+    #TL ACC AVRG NO_ORACLE
+    acc_tl_avrg = MetricTemplate(flags=[
+        Flags.LevelFlags.TL,
+        Flags.MetricFlags.ACC,
+        Flags.DistrFlags.Avrg,
+        Flags.PredictionFlags.NO_ORACLE,
+    ])
+    fig2, ax = plt.subplots(1, 1, figsize=(10, 5))
+    ax.set_title("Experiment 1: Token Level Accuracy")
+    ax.set_ylabel("Accuracy in %")
+    ax.set_xlabel("Percentage of data used for training")
+    x_lbls = ['1%','2%','4%','8%','16%','32%','64%','100%']
+    # change this to choose epochs to show
+    epochs_to_show = ['70','50','5']
+
+    plot_multi_step(ax =ax,
+                    data_container = E1,
+                    metric_temp = acc_tl_avrg,
+                    steps = epochs_to_show,
+                    colors=None,
+                    x_lbls = x_lbls,
+                    h_lines = True,
+                    coords_txt = True,
+                    )
+    ax.legend()
+    return fig2, ax
+
+
+def mk_e2_fig_1(res_path:str):
+    E2 = EvaluationResultContainer.from_json(res_path)
+    fig1, axs2_1 = plt.subplots(1, 2, figsize=(20, 10))
+    axs2_1[0].set_title("Experiment 2: Token Level Accuracy\n by output length without oracle")
+    axs2_1[0].set_ylabel("Accuracy in %")
+    axs2_1[0].set_xlabel("Output length")
+
+    axs2_1[1].set_title("Experiment 2: Token Level Accuracy\n by input length without oracle")
+    axs2_1[1].set_ylabel("Accuracy in %")
+    axs2_1[1].set_xlabel("Input length")
+
+    # ACC TL NO ORACLE OUTLEN
+    acc_tl_outlen = MetricTemplate(
+        flags=[
+            Flags.LevelFlags.TL,
+            Flags.MetricFlags.ACC,
+            Flags.DistrFlags.OutLen,
+            Flags.PredictionFlags.NO_ORACLE,
+            ])
+
+    # ACC TL NO ORACLE INLEN
+    acc_tl_inlen = MetricTemplate(
+        flags=[
+            Flags.LevelFlags.TL,
+            Flags.MetricFlags.ACC,
+            Flags.DistrFlags.InLen,
+            Flags.PredictionFlags.NO_ORACLE,
+            ])
+
+    # change this to choose epochs to show
+    epochs_to_show = ['70','40','1']
+    colors = ["blue","red","yellow"]
+
+    plot_multi_step(ax =axs2_1[0],
+                    data_container = E2,
+                    metric_temp = acc_tl_outlen,
+                    steps = epochs_to_show,
+                    colors=colors,
+                    cut_trailing_zeros=True, 
+                    h_lines=True,
+                    coords_txt=True
+                    )
+
+    plot_multi_step(ax =axs2_1[1],
+                    data_container = E2,
+                    metric_temp = acc_tl_inlen,
+                    steps = epochs_to_show,
+                    colors=colors,
+                    cut_trailing_zeros=True, 
+                    omit_zero_lbls=True,
+                    omit_empty= True,
+                    h_lines=True,
+                    coords_txt=True
+                    )
+
+    axs2_1[0].legend()
+    axs2_1[1].legend()
+    return fig1, axs2_1
+
+
+def mk_e2_fig_2(res_path:str):
+    E2 = EvaluationResultContainer.from_json(res_path)
+    fig2, axs2_2 = plt.subplots(1, 2, figsize=(20, 10))
+    axs2_2[0].set_title("Experiment 2: Token Level Accuracy\n by output length with oracle")
+    axs2_2[0].set_ylabel("Accuracy in %")
+    axs2_2[0].set_xlabel("Output length")
+    axs2_2[1].set_title("Experiment 2: Token Level Accuracy\n by input length with oracle")
+    axs2_2[1].set_ylabel("Accuracy in %")
+    axs2_2[1].set_xlabel("Input length")
+
+    # ACC TL ORACLE OUTLEN
+    acc_tl_orac_outlen = MetricTemplate(
+        flags=[
+            Flags.LevelFlags.TL,
+            Flags.MetricFlags.ACC,
+            Flags.DistrFlags.OutLen,
+            Flags.PredictionFlags.ORACLE,
+            ])
+
+    # ACC TL ORACLE INLEN
+    acc_tl_orac_inlen = MetricTemplate(
+        flags=[
+            Flags.LevelFlags.TL,
+            Flags.MetricFlags.ACC,
+            Flags.DistrFlags.InLen,
+            Flags.PredictionFlags.ORACLE,
+            ])
+
+    # change this to choose epochs to show
+    epochs_to_show = [70,40,1]
+    colors = ["blue","red","yellow"]
+
+    plot_multi_step(ax =axs2_2[0],
+                    data_container = E2,
+                    metric_temp = acc_tl_orac_outlen,
+                    steps = epochs_to_show,
+                    colors=colors,
+                    cut_trailing_zeros=True, 
+                    omit_zero_lbls=True,
+                    h_lines=True,
+                    coords_txt=True
+                    )
+
+    plot_multi_step(ax =axs2_2[1],
+                    data_container = E2,
+                    metric_temp = acc_tl_orac_inlen,
+                    steps = epochs_to_show,
+                    colors=colors,
+                    cut_trailing_zeros=True, 
+                    omit_zero_lbls=False,
+                    h_lines=True,
+                    coords_txt=True
+                    )
+
+    axs2_2[0].legend()
+    axs2_2[1].legend()
+    return fig2, axs2_2
+
+
+def mk_e2_fig_3(res_path:str):
+    E2 = EvaluationResultContainer.from_json(res_path)
+    fig3, axs2_3 = plt.subplots(1, 2, figsize=(20, 10))
+    axs2_3[0].set_title("Experiment 2: Sequence Level Accuracy\n by output length with oracle")
+    axs2_3[0].set_ylabel("Accuracy in %")
+    axs2_3[0].set_xlabel("Output length")
+    axs2_3[1].set_title("Experiment 2: Sequence Level Accuracy\n by input length with oracle")
+    axs2_3[1].set_ylabel("Accuracy in %")
+    axs2_3[1].set_xlabel("Input length")
+
+    # ACC SL ORACLE OUTLEN
+    acc_sl_orac_outlen = MetricTemplate(
+        flags=[
+            Flags.LevelFlags.SL,
+            Flags.MetricFlags.ACC,
+            Flags.DistrFlags.OutLen,
+            Flags.PredictionFlags.ORACLE,
+            ])
+
+    # ACC SL ORACLE INLEN
+    acc_sl_inlen = MetricTemplate(
+        flags=[
+            Flags.LevelFlags.SL,
+            Flags.MetricFlags.ACC,
+            Flags.DistrFlags.InLen,
+            Flags.PredictionFlags.ORACLE,
+            ])
+
+    # change this to choose epochs to show
+    epochs_to_show = [70,40,1]
+    colors = ["blue","red","yellow"]
+    plot_multi_step(ax =axs2_3[0],
+                    data_container = E2,
+                    metric_temp = acc_sl_orac_outlen,
+                    steps = epochs_to_show,
+                    colors=colors,
+                    cut_trailing_zeros=True, 
+                    omit_zero_lbls=True,
+                    h_lines=True,
+                    coords_txt=True
+                    )
+
+    plot_multi_step(ax =axs2_3[1],
+                    data_container = E2,
+                    metric_temp = acc_sl_inlen,
+                    steps = epochs_to_show,
+                    colors=colors,
+                    cut_trailing_zeros=True, 
+                    omit_zero_lbls=False,
+                    h_lines=True,
+                    coords_txt=True
+                    )
+
+    axs2_3[0].legend()
+    axs2_3[1].legend()
+    return fig3, axs2_3

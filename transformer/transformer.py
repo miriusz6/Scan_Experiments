@@ -18,7 +18,7 @@ class Transformer(nn.Module):
         dropout=0.0,
         max_len=128,
     ):
-        super().__init__()
+        super().__init__() 
         self.src_pad_idx = src_pad_idx
         self.tgt_pad_idx = tgt_pad_idx
         self.num_heads = num_heads

@@ -164,3 +164,82 @@ class ScanDataset(Dataset):
             targets = torch.cat((head_targ, tail_targ))
             headNtail = ScanDataset((inputs, decoder_input, targets), vocab=v)
             return headNtail, chosen_fold
+        
+
+from transformers import PreTrainedTokenizer
+
+class ScanDatasetHF(Dataset):
+    def __init__(
+        self,
+        dataset_path: str,
+        tokenizer:PreTrainedTokenizer,
+        in_seq_len: int = 75,
+        out_seq_len: int = 80,
+        device: str = "cuda",
+    ):
+        self.tokenizer = tokenizer
+        self._verify_path(dataset_path)
+        self.path = dataset_path
+        self.in_seq_len = in_seq_len
+        self.out_seq_len = out_seq_len
+        # create and update vocab if not provided
+        inputs, targets = self._load_data(self.path)
+        inputs = self.tokenizer(inputs, 
+                                padding="max_length", 
+                                truncation=True, 
+                                max_length=in_seq_len,
+                                min_length=in_seq_len,
+                                padding_side='right',
+                                return_tensors="pt")
+        targets = self.tokenizer(targets,
+                                    padding="max_length",
+                                    truncation=True,
+                                    max_length=out_seq_len,
+                                    min_length=out_seq_len,
+                                    padding_side='right',
+                                    return_tensors="pt")        
+        self.length = self.inputs.size(0)
+        
+
+    
+    def _verify_path(self, path):
+        if not os.path.isfile(path):
+            # check if file exists
+            raise FileNotFoundError("File not found: {}".format(path))
+        elif not os.access(path, os.R_OK):
+            # check if permission to read
+            raise PermissionError("File not readable: {}".format(path))
+            # check if txt
+        elif not path.endswith(".txt"):
+            raise ValueError("File is not a txt file: {}".format(path))
+
+    def _load_data(self, path, mk_vocab):
+        inputs, targets = [], [], []
+        # one line at a time
+        with open(path, "r") as f:
+            eof = False
+            while not eof:
+                l = f.readline()
+                eof = l == ""
+                if eof:
+                    break
+                # clean
+                inp, targ = self._clean_raw(l)
+                inputs.append(inp)
+                targets.append(targ)
+        return inputs, targets
+
+    def _clean_raw(self, line):
+        # "IN: SEQ OUT: SEQ" -> ["SEQ"], ["SEQ"]
+        inp, targ = line.split("OUT:")
+        _, inp = inp.split("IN:")
+        inp, targ = inp.strip(), targ.strip()
+        return inp, targ
+
+    def __len__(self):
+        return self.length
+
+    def __getitem__(self, idx):
+        if isinstance(idx, int) and idx >= self.length:
+            raise IndexError("Index out of range")
+        return self.inputs[idx], self.decoder_input[idx], self.targets[idx]

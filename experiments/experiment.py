@@ -1,9 +1,10 @@
 # OTHER
 import os 
 from tensorboardX import SummaryWriter
-from tqdm import tqdm
+from tqdm.notebook import tqdm
 import pickle
 import json
+from math import ceil
 # TORCH
 import torch
 from torch.utils.data import DataLoader
@@ -25,6 +26,7 @@ class Experiment():
     def __init__(self, 
                 experiment_type: ExperimentType,
                 config: ExperimentConfig,
+                model = None,
                 ):
         self.e_type = experiment_type
         self.config = config
@@ -38,11 +40,14 @@ class Experiment():
         self.train_loader = None
         self.test_loader = None
         self.result_container:EvaluationResultContainer = EvaluationResultContainer()
-
+             
         self.use_k_fold = self.config.k_fold is not None
         self.current_fold = None
         self.folds = None
+        self._mk_model = (lambda: model) if model is not None else self._mk_base_transformer_model
         self.model = None
+        
+         
         self.overwrite = self.config.overwrite_if_saving
         
         self.use_TB = config.use_tensorboard
@@ -138,10 +143,12 @@ class Experiment():
             in_seq_len=max_len,
             out_seq_len=max_len + 20,
             device=device,
-        )
+        ) 
         return test_dataset
-    
-    def _mk_dataloaders(self):
+         # 
+
+    def _mk_dataloaders(self): 
+
         train_loader = DataLoader(self.train_dataset,
                                 batch_size=self.config.batch_size,
                                 shuffle=True
@@ -151,7 +158,7 @@ class Experiment():
                                 )
         return train_loader, test_loader
 
-    def _mk_model(self):
+    def _mk_base_transformer_model(self):
         model = Transformer(
             src_vocab_size=len(self.train_dataset.vocab),
             tgt_vocab_size=len(self.train_dataset.vocab),
@@ -226,11 +233,13 @@ class Experiment():
         )
         grad_clip = self.config.grad_clip
         batch_size = self.config.batch_size
-        max_epoch = self.config.epochs
+        
+        max_epoch = self.config.epochs if self.config.epochs is not None else ceil(self.config.max_steps/len(self.train_dataset))
+        max_steps = self.config.max_steps if self.config.max_steps is not None else (max_epoch*len(self.train_loader)*batch_size)+1
         max_batches = len(self.train_loader)*max_epoch
         batch_num = 0
         step_num = 0
-        step = 0
+        batch_step = 0
 
         eval_interval = self.config.evaluation_interval
         model_sv_interval = self.config.model_save_interval
@@ -240,32 +249,68 @@ class Experiment():
         if self.config.detailed_logging:
             print("Training started for experiment: ", self.e_type.name)#, fold_info)
 
+   
         # TRAINING LOOP
         epoch_progress = tqdm(range(self.epoch_checkpoint, max_epoch), desc="EPOCH"+fold_info)
         for epoch in epoch_progress:
+            if max_steps is not None and step_num >= max_steps:
+                    print("Early Stopping: Max steps reached")
+                    break
             total_loss = 0
             self.model.train()
+            #batch_bar = tqdm(self.train_loader, desc="BATCH")
+            #for batch in batch_bar:
+            batch_step = 0
             for batch in self.train_loader:
-                inputs, decoder_inputs, target_label_indices = batch
+                if max_steps is not None and step_num >= max_steps:
+                    break
 
+
+                inputs, decoder_inputs, target_label_indices = batch
                 optimizer.zero_grad()
-                out = self.model(inputs, decoder_inputs)
+                #is_teacher = True 
+                is_teacher = batch_step % 2 == 0
+                
+                if is_teacher:
+                    out = self.model(inputs, decoder_inputs)
+                else:
+                    with torch.no_grad():
+                        self.model.eval()
+                        fst_out = self.model(inputs, decoder_inputs)
+                        fst_out = fst_out.argmax(2)
+                    self.model.train()
+
+                    inp_msks = self.model.create_src_mask(inputs)
+                    enc_out = self.model.encoder(inputs, inp_msks)
+
+                    tgt_msks = self.model.create_tgt_mask(fst_out)
+                    dec_out = self.model.decoder(fst_out, enc_out, inp_msks, tgt_msks)
+                    out = dec_out
+
+                
+
                 loss = criterion(out.permute(0, 2, 1), target_label_indices)
                 loss.backward()
                 clip_grad_norm_(self.model.parameters(), grad_clip)
                 optimizer.step()
 
                 total_loss += loss.item()
-                    
+
                 batch_num += 1
+                batch_step += 1
                 step_num += batch_size
+
+                if self.config.detailed_logging or batch_num == len(self.train_loader):
+                    print(f"Epoch {epoch+1}/{max_epoch} Batch {batch_num}/{max_batches} Trining Loss: {total_loss / (batch_num + 1)} Teacher: {is_teacher} Step: {step_num}/{max_steps}" )
+
+                
 
             epoch += 1
             if self.config.detailed_logging or epoch == max_epoch:
-                print(f"Epoch {epoch}/{max_epoch} Batch {batch_num}/{max_batches} Trining Loss: {total_loss / (step + 1)}")
+                print(f"Epoch {epoch}/{max_epoch} Batch {batch_num}/{max_batches} Trining Loss: {total_loss / (batch_num + 1)}")
 
             # EVALUATION 
-            if epoch % eval_interval == 0 or epoch == max_epoch:
+            if epoch % eval_interval == 0 or epoch == max_epoch or max_steps is not None and step_num >= max_steps:
                 self.model.eval()
                 result = evaluate_model_batchwise(self.model,self.test_dataset, self.test_loader, self.test_dataset.vocab, self.device)
                 #result = EvaluationResult(result, self.name+fold_info+f"_epoch_{epoch}", self.e_type)
@@ -289,8 +334,6 @@ class Experiment():
         if self.use_TB:
             self.writer.close()
         
-        if self.config.detailed_logging:
-            print("Training finished for experiment: ", self.e_type.name)
 
         self.name = org_name_base + org_rep_info
             

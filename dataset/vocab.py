@@ -50,6 +50,6 @@ class Vocab:
         with open(path, "wb") as f:
             pickle.dump(self, f)
 
-    def from_file(path):
+    def from_file(self,path):
         with open(path, "rb") as f:
             return pickle.load(f)
