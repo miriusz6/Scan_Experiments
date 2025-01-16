@@ -173,31 +173,49 @@ class ScanDatasetHF(Dataset):
         self,
         dataset_path: str,
         tokenizer:PreTrainedTokenizer,
-        in_seq_len: int = 75,
-        out_seq_len: int = 80,
-        device: str = "cuda",
+        in_seq_len: int = 120,#75,
+        out_seq_len: int = 120,
+        device: str = 'cuda',
     ):
+        
         self.tokenizer = tokenizer
         self._verify_path(dataset_path)
         self.path = dataset_path
         self.in_seq_len = in_seq_len
         self.out_seq_len = out_seq_len
+
         # create and update vocab if not provided
-        inputs, targets = self._load_data(self.path)
+        inputs, dec_in, targets = self._load_data(self.path)
         inputs = self.tokenizer(inputs, 
                                 padding="max_length", 
                                 truncation=True, 
                                 max_length=in_seq_len,
-                                min_length=in_seq_len,
                                 padding_side='right',
                                 return_tensors="pt")
         targets = self.tokenizer(targets,
                                     padding="max_length",
                                     truncation=True,
                                     max_length=out_seq_len,
-                                    min_length=out_seq_len,
                                     padding_side='right',
-                                    return_tensors="pt")        
+                                    return_tensors="pt")    
+        decoder_input = self.tokenizer(dec_in,
+                                    padding="max_length",
+                                    truncation=True,
+                                    max_length=out_seq_len,
+                                    padding_side='right',
+                                    return_tensors="pt")
+
+        
+
+
+        self.inputs = inputs['input_ids']
+        self.targets = targets['input_ids']
+        self.decoder_input = decoder_input['input_ids']
+        self.inputs_msks = inputs['attention_mask']
+        self.targets_msks = targets['attention_mask']
+        self.decoder_input_msks = decoder_input['attention_mask']
+
+        self.output_vocab = torch.sort(torch.unique(self.inputs.flatten())).values
         self.length = self.inputs.size(0)
         
 
@@ -213,8 +231,8 @@ class ScanDatasetHF(Dataset):
         elif not path.endswith(".txt"):
             raise ValueError("File is not a txt file: {}".format(path))
 
-    def _load_data(self, path, mk_vocab):
-        inputs, targets = [], [], []
+    def _load_data(self, path):
+        inputs, dec_input, targets = [], [], []
         # one line at a time
         with open(path, "r") as f:
             eof = False
@@ -225,9 +243,13 @@ class ScanDatasetHF(Dataset):
                     break
                 # clean
                 inp, targ = self._clean_raw(l)
+                dec_in = targ
+                targ = self._add_eos(targ)
+                inp = self._add_eos(inp)
                 inputs.append(inp)
                 targets.append(targ)
-        return inputs, targets
+                dec_input.append(dec_in)
+        return inputs, dec_input, targets
 
     def _clean_raw(self, line):
         # "IN: SEQ OUT: SEQ" -> ["SEQ"], ["SEQ"]
@@ -235,6 +257,20 @@ class ScanDatasetHF(Dataset):
         _, inp = inp.split("IN:")
         inp, targ = inp.strip(), targ.strip()
         return inp, targ
+    
+    def _add_start(self, tokens, token):
+        return [token] + tokens
+
+    def _add_sos(self, tokens):
+        return self.tokenizer.special_tokens_map['bos_token'] + tokens
+
+    def _add_eos(self, tokens):
+        return tokens + self.tokenizer.special_tokens_map['eos_token']
+        
+
+    def _add_sos_eos(self, tokens):
+        return self._add_eos(self._add_sos(tokens))
+
 
     def __len__(self):
         return self.length
@@ -242,4 +278,4 @@ class ScanDatasetHF(Dataset):
     def __getitem__(self, idx):
         if isinstance(idx, int) and idx >= self.length:
             raise IndexError("Index out of range")
-        return self.inputs[idx], self.decoder_input[idx], self.targets[idx]
+        return self.inputs[idx], self.inputs_msks[idx], self.decoder_input[idx], self.decoder_input_msks[idx], self.targets[idx], self.targets_msks[idx]

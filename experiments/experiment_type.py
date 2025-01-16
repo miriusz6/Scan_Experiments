@@ -66,6 +66,8 @@ class ExperimentType(IntEnum):
 
     UNDEF = auto()
 
+    DUMMY = auto()
+
     def __str__(self):
         return self.name
  
@@ -136,6 +138,11 @@ class ExperimentType(IntEnum):
             return self._E2_paths()
         elif self.name.startswith("E_3"):
             return self._E3_paths()
+        elif self.name.startswith("DUMMY"):
+            # dataset\data\simple_split\tasks_test_mini_simple.txt
+            return {"train": os.path.join(CURR_DIR, "dataset/data/simple_split/tasks_test_mini_simple.txt"),
+                    "test": os.path.join(CURR_DIR, "dataset/data/simple_split/tasks_test_mini_simple.txt")}
+
         else:
             raise ValueError("Invalid experiment type")
 

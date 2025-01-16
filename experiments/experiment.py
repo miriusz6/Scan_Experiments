@@ -26,13 +26,22 @@ class Experiment():
     def __init__(self, 
                 experiment_type: ExperimentType,
                 config: ExperimentConfig,
-                model = None,
+                mk_model = None,
+                mk_train_dataset = None,
+                mk_test_dataset = None,
+                evaluate_model = None
                 ):
         self.e_type = experiment_type
         self.config = config
         self.name = self.e_type.name if self.config.experiment_name is None else self.config.experiment_name
         if ("rep") not in self.name:
             self.name = self.name + "_rep_1"
+        
+        self._mk_model = (lambda: mk_model) if mk_model is not None else self._mk_base_transformer_model
+        self._mk_train_dataset = (lambda: mk_train_dataset) if mk_train_dataset is not None else self._mk_train_dataset_def
+        self._mk_test_dataset = (lambda: mk_test_dataset) if mk_test_dataset is not None else self._mk_test_dataset_def
+        self.evaluate_model = evaluate_model
+        
         self.device = config.device
         self.writer = None
         self.train_dataset = self._mk_train_dataset()
@@ -44,7 +53,6 @@ class Experiment():
         self.use_k_fold = self.config.k_fold is not None
         self.current_fold = None
         self.folds = None
-        self._mk_model = (lambda: model) if model is not None else self._mk_base_transformer_model
         self.model = None
         
          
@@ -120,7 +128,7 @@ class Experiment():
             self.test_dataset = self._mk_test_dataset()
         self.train_loader, self.test_loader = self._mk_dataloaders()
 
-    def _mk_train_dataset(self):
+    def _mk_train_dataset_def(self):
         paths = self.e_type.get_data_paths()
         max_len = self.config.emb_dim
         device = self.device
@@ -132,7 +140,7 @@ class Experiment():
         )
         return train_dataset
     
-    def _mk_test_dataset(self):
+    def _mk_test_dataset_def(self):
         # call alwyas after mk_train_dataset
         paths = self.e_type.get_data_paths()
         max_len = self.config.emb_dim
