@@ -215,7 +215,7 @@ class ScanDatasetHF(Dataset):
         self.targets_msks = targets['attention_mask']
         self.decoder_input_msks = decoder_input['attention_mask']
 
-        self.output_vocab = torch.sort(torch.unique(self.inputs.flatten())).values
+        self.output_vocab = torch.sort(torch.unique(self.targets.flatten())).values
         self.length = self.inputs.size(0)
         
 
